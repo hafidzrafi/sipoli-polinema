@@ -1,0 +1,34 @@
+name: Notion Task Sync
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - closed
+
+jobs:
+  sync-notion:
+    name: Sync Git Activity to Notion Task
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run Notion synchronization script
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TASKS_DB_ID: ${{ secrets.NOTION_TASKS_DB_ID }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 .github/scripts/sync_notion.py

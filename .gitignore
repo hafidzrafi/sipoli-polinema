@@ -1,0 +1,36 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# PHP & Dependencies
+vendor/
+composer.phar
+*.log
+
+# Database dumps & local data
+*.sql.bak
+*.dump
+*.sqlite
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor & IDE directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Typst compiled output & caches
+logbook/**/*.pdf
+.typst-cache/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
