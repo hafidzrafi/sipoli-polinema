@@ -2,7 +2,7 @@
 <!-- Describe the change concisely in 1-2 sentences. -->
 
 ## Related Task
-<!-- Notion Task ID, e.g., SIPOLI-06 -->
+<!-- Notion Task ID, e.g., VALENIA-06 -->
 Closes #
 
 ## Verification Checklist

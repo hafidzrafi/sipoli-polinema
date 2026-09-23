@@ -15,7 +15,7 @@ logger = logging.getLogger("notion-sync")
 
 NOTION_API_VERSION = "2022-06-28"
 NOTION_BASE_URL = "https://api.notion.com/v1"
-TASK_REGEX = re.compile(r"\bSIPOLI-(\d+)\b", re.IGNORECASE)
+TASK_REGEX = re.compile(r"\b(?:VALENIA|SIPOLI)-(\d+)\b", re.IGNORECASE)
 
 
 def call_notion_api(endpoint: str, token: str, method: str = "GET", payload: dict | None = None) -> dict:
@@ -44,7 +44,7 @@ def extract_task_ids(text: str) -> list[str]:
     matches = TASK_REGEX.findall(text)
     task_ids = []
     for match in matches:
-        formatted_id = f"SIPOLI-{int(match):02d}"
+        formatted_id = f"VALENIA-{int(match):02d}"
         if formatted_id not in task_ids:
             task_ids.append(formatted_id)
     return task_ids
@@ -152,7 +152,7 @@ def main() -> int:
                 task_ids.append(tid)
 
     if not task_ids:
-        logger.info("No SIPOLI task IDs detected in commit or pull request. Exiting cleanly.")
+        logger.info("No VALENIA or SIPOLI task IDs detected in commit or pull request. Exiting cleanly.")
         return 0
 
     if not status_target:

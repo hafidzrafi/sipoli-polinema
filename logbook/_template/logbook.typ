@@ -3,7 +3,7 @@
   period: "22 September – 26 September 2026",
   sprint_name: "Sprint 1: Core Infrastructure",
   checkpoint_target: "Checkpoint 2 (Minggu ke-8)",
-  project_title: "SIPOLI (Sistem Informasi Poliklinik Polinema)",
+  project_title: "VALENIA (Verifikasi Antrian & Layanan Navigasi Interaktif Aplikasi Poliklinik)",
   institution: "POLITEKNIK NEGERI MALANG",
   department: "JURUSAN TEKNOLOGI INFORMASI",
   study_program: "PROGRAM STUDI D-IV TEKNIK INFORMATIKA",
@@ -15,7 +15,7 @@
   supervisor_nip: "-",
   body
 ) = {
-  set document(title: "Logbook PBL Minggu " + str(week_number) + " - SIPOLI", author: "Tim PBL SIPOLI")
+  set document(title: "Logbook PBL Minggu " + str(week_number) + " - VALENIA", author: "Tim PBL VALENIA")
   set page(
     paper: "a4",
     margin: (top: 2.5cm, bottom: 2.5cm, left: 2.5cm, right: 2.5cm),
@@ -169,7 +169,7 @@
     ],
     [
       Malang, #period.split("–").last().trim() \
-      Ketua Tim PBL SIPOLI
+      Ketua Tim PBL VALENIA
       #v(45pt)
       *Raditya Mahatma Ghosi* \
       NIM. 254107020102

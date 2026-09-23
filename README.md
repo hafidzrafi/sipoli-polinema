@@ -1,3 +1,3 @@
-# SIPOLI
+# VALENIA
 
-Clinical information management system for Poliklinik Politeknik Negeri Malang (Polinema). SIPOLI handles patient registration, daily clinic queue management, medical examination records, and visit report generation for the Polinema campus clinic.
+Verifikasi Antrian & Layanan Navigasi Interaktif Aplikasi Poliklinik (Queue Verification & Interactive Navigation Service for Polyclinic Application) for Poliklinik Politeknik Negeri Malang (Polinema). VALENIA handles patient registration, daily clinic queue verification, interactive room navigation, medical examination records, and visit report generation.
