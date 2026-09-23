@@ -6,6 +6,8 @@ on:
       - main
       - 'feat/**'
       - 'fix/**'
+      - 'docs/**'
+      - 'refactor/**'
   pull_request:
     types:
       - opened

@@ -51,7 +51,30 @@ def extract_task_ids(text: str) -> list[str]:
 
 
 def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> str | None:
-    query_payload = {
+    # 1. Primary: query via native Notion Unique ID property ("ID")
+    digits_match = re.search(r"\d+", task_id)
+    if digits_match:
+        number = int(digits_match.group())
+        query_payload = {
+            "filter": {
+                "property": "ID",
+                "unique_id": {
+                    "equals": number,
+                },
+            }
+        }
+        try:
+            result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=query_payload)
+            pages = result.get("results", [])
+            if pages:
+                return pages[0]["id"]
+            logger.warning("No task card found in Notion for ID %s", task_id)
+            return None
+        except urllib.error.HTTPError as err:
+            logger.debug("Unique ID query failed with HTTP error %d, trying fallback", err.code)
+
+    # 2. Fallback: query via legacy rich_text property ("Task ID")
+    fallback_payload = {
         "filter": {
             "property": "Task ID",
             "rich_text": {
@@ -59,12 +82,16 @@ def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> s
             },
         }
     }
-    result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=query_payload)
-    pages = result.get("results", [])
-    if not pages:
-        logger.warning("No task card found in Notion for ID %s", task_id)
-        return None
-    return pages[0]["id"]
+    try:
+        result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=fallback_payload)
+        pages = result.get("results", [])
+        if pages:
+            return pages[0]["id"]
+    except urllib.error.HTTPError as err:
+        logger.debug("Rich text fallback query failed with HTTP error %d", err.code)
+
+    logger.warning("No task card found in Notion for ID %s", task_id)
+    return None
 
 
 def update_notion_task(page_id: str, token: str, status_name: str, link_url: str | None = None) -> None:
@@ -116,11 +143,17 @@ def parse_github_event(event_path: str) -> tuple[list[str], str, str]:
 
     elif event_name == "push":
         head_commit = event.get("head_commit") or {}
-        commit_msg = head_commit.get("message", "")
         link_url = head_commit.get("url", "")
         ref = event.get("ref", "")
 
-        target_tasks = extract_task_ids(commit_msg)
+        messages = [head_commit.get("message", "")]
+        for c in event.get("commits", []):
+            msg = c.get("message")
+            if msg:
+                messages.append(msg)
+        combined_text = f"{' '.join(messages)} {ref}"
+        target_tasks = extract_task_ids(combined_text)
+
         if ref == "refs/heads/main":
             status_target = "Done"
         else:
