@@ -51,44 +51,24 @@ def extract_task_ids(text: str) -> list[str]:
 
 
 def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> str | None:
-    # 1. Primary: query via native Notion Unique ID property ("ID")
     digits_match = re.search(r"\d+", task_id)
-    if digits_match:
-        number = int(digits_match.group())
-        query_payload = {
-            "filter": {
-                "property": "ID",
-                "unique_id": {
-                    "equals": number,
-                },
-            }
-        }
-        try:
-            result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=query_payload)
-            pages = result.get("results", [])
-            if pages:
-                return pages[0]["id"]
-            logger.warning("No task card found in Notion for ID %s", task_id)
-            return None
-        except urllib.error.HTTPError as err:
-            logger.debug("Unique ID query failed with HTTP error %d, trying fallback", err.code)
+    if not digits_match:
+        logger.warning("No numeric digits found in task ID %s", task_id)
+        return None
 
-    # 2. Fallback: query via legacy rich_text property ("Task ID")
-    fallback_payload = {
+    number = int(digits_match.group())
+    query_payload = {
         "filter": {
-            "property": "Task ID",
-            "rich_text": {
-                "equals": task_id,
+            "property": "ID",
+            "unique_id": {
+                "equals": number,
             },
         }
     }
-    try:
-        result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=fallback_payload)
-        pages = result.get("results", [])
-        if pages:
-            return pages[0]["id"]
-    except urllib.error.HTTPError as err:
-        logger.debug("Rich text fallback query failed with HTTP error %d", err.code)
+    result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=query_payload)
+    pages = result.get("results", [])
+    if pages:
+        return pages[0]["id"]
 
     logger.warning("No task card found in Notion for ID %s", task_id)
     return None
