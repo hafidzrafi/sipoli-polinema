@@ -1,10 +1,19 @@
 # Team Contribution Guide
 
+## Automated Notion Sync
+
+The Kanban board in Notion automatically tracks task progress:
+- `[To Do] -> [In Progress]`: Triggers when pushing a working branch (`feat/**`, `fix/**`, `docs/**`, `refactor/**`) or commits containing a task ID.
+- `[In Progress] -> [In Review]`: Triggers when opening a Pull Request linked to a task ID.
+- `[In Review] -> [Done]`: Triggers when the Pull Request is merged into `main`.
+
 ## Branching
 
 Work in branches created from `main`:
 - Features: `feat/VALENIA-[id]-[short-description]`
-- Fixes: `fix/VALENIA-[id]-[short-description]`
+- Bug fixes: `fix/VALENIA-[id]-[short-description]`
+- Documentation: `docs/VALENIA-[id]-[short-description]`
+- Refactoring: `refactor/VALENIA-[id]-[short-description]`
 
 Example:
 ```bash
@@ -23,6 +32,6 @@ Examples:
 
 ## Pull Requests
 
-1. Open a PR using the repository template.
-2. Ensure code follows PSR-12 and contains no debug code (`var_dump`, `print_r`).
+1. Open a PR using the repository template. Include `Closes #VALENIA-[id]` in the description.
+2. Ensure code follows PSR-12 / PER-CS and contains no debug code (`var_dump`, `print_r`).
 3. Manually test against local database before requesting review.

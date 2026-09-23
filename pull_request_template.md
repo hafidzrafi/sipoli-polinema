@@ -6,7 +6,7 @@
 Closes #
 
 ## Verification Checklist
-- [ ] Code follows PSR-12
+- [ ] Code follows PSR-12 / PER-CS
 - [ ] No `var_dump()`, `print_r()`, or temporary debug code committed
 - [ ] Manually tested locally
 
