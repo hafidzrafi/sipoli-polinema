@@ -165,7 +165,7 @@ def main() -> int:
                 task_ids.append(tid)
 
     if not task_ids:
-        logger.info("No VALENIA or SIPOLI task IDs detected in commit or pull request. Exiting cleanly.")
+        logger.info("No task IDs detected in commit or pull request. Exiting cleanly.")
         return 0
 
     if not status_target:
