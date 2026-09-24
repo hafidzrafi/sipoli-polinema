@@ -16,11 +16,11 @@ import sync_notion
 class TestExtractTaskIds(unittest.TestCase):
     def test_extract_standard_format(self):
         text = "feat: add login session guard [#VALENIA-08]"
-        self.assertEqual(sync_notion.extract_task_ids(text), ["VALENIA-08"])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), ["VALENIA-08"])
 
     def test_extract_unpadded_format(self):
         text = "fix: reset counter [#VALENIA-6]"
-        self.assertEqual(sync_notion.extract_task_ids(text), ["VALENIA-06"])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), ["VALENIA-06"])
 
     def test_extract_from_branch_ref(self):
         text = "refs/heads/feat/VALENIA-06-router-skeleton"
@@ -28,22 +28,28 @@ class TestExtractTaskIds(unittest.TestCase):
 
     def test_extract_multiple_distinct_tasks(self):
         text = "feat: [#VALENIA-06] and [#VALENIA-08]"
-        self.assertEqual(sync_notion.extract_task_ids(text), ["VALENIA-06", "VALENIA-08"])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), ["VALENIA-06", "VALENIA-08"])
 
     def test_extract_deduplicate_repeated_ids(self):
         text = "feat: [#VALENIA-06] also related to [#VALENIA-06]"
-        self.assertEqual(sync_notion.extract_task_ids(text), ["VALENIA-06"])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), ["VALENIA-06"])
 
     def test_extract_legacy_sipoli_prefix(self):
         text = "fix: bug [#SIPOLI-03]"
-        self.assertEqual(sync_notion.extract_task_ids(text), ["VALENIA-03"])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), ["VALENIA-03"])
 
     def test_extract_no_task_id_present(self):
         text = "chore: format code with prettier"
-        self.assertEqual(sync_notion.extract_task_ids(text), [])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(text), [])
 
     def test_extract_empty_string(self):
-        self.assertEqual(sync_notion.extract_task_ids(""), [])
+        self.assertEqual(sync_notion.extract_task_ids_from_commit(""), [])
+
+    def test_extract_from_manual_bare_id(self):
+        self.assertEqual(sync_notion.extract_task_ids_from_manual("VALENIA-06"), ["VALENIA-06"])
+
+    def test_extract_from_manual_tagged_id(self):
+        self.assertEqual(sync_notion.extract_task_ids_from_manual("[#VALENIA-06]"), ["VALENIA-06"])
 
     def test_casual_mention_in_commit_is_ignored(self):
         commit_msg = (

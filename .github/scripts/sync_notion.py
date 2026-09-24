@@ -22,7 +22,7 @@ PR_TASK_REGEX = re.compile(
     r"(?:\[#|(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#?)(?:VALENIA|SIPOLI)-(\d+)\]?",
     re.IGNORECASE,
 )
-GENERIC_TASK_REGEX = re.compile(r"\b(?:VALENIA|SIPOLI)-(\d+)\b", re.IGNORECASE)
+MANUAL_TASK_REGEX = re.compile(r"\b(?:VALENIA|SIPOLI)-(\d+)\b", re.IGNORECASE)
 
 STATUS_RANKS = {
     "To do": 1,
@@ -79,16 +79,15 @@ def extract_task_ids_from_pr_text(text: str) -> list[str]:
     return _format_task_ids(PR_TASK_REGEX.findall(text))
 
 
-def extract_task_ids(text: str) -> list[str]:
+def extract_task_ids_from_manual(text: str) -> list[str]:
+    """Extract task IDs from a plain string such as the TASK_ID env var override.
+
+    Accepts both the formal tag format ([#VALENIA-06]) and bare IDs (VALENIA-06).
+    Intentionally broad because the caller controls the input directly.
+    """
     if not text:
         return []
-    strict_matches = extract_task_ids_from_commit(text)
-    if strict_matches:
-        return strict_matches
-    ref_matches = extract_task_ids_from_ref(text)
-    if ref_matches:
-        return ref_matches
-    return _format_task_ids(GENERIC_TASK_REGEX.findall(text))
+    return _format_task_ids(MANUAL_TASK_REGEX.findall(text))
 
 
 def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> dict | None:
@@ -116,21 +115,11 @@ def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> d
 
 
 def should_update_status(current_status: str, target_status: str, is_pr_rejected: bool = False) -> bool:
-    if is_pr_rejected and target_status == "In progress" and current_status == "In review":
+    # PR rejection is the only permitted backward transition: In review -> In progress.
+    if is_pr_rejected and current_status == "In review" and target_status == "In progress":
         return True
 
-    current_rank = STATUS_RANKS.get(current_status, 0)
-    target_rank = STATUS_RANKS.get(target_status, 0)
-
-    # Prevent regressions from Done to any lower status
-    if current_status == "Done" and target_status != "Done":
-        return False
-
-    # Prevent push events from regressing In review to In progress
-    if current_status == "In review" and target_status == "In progress":
-        return False
-
-    return target_rank > current_rank
+    return STATUS_RANKS.get(target_status, 0) > STATUS_RANKS.get(current_status, 0)
 
 
 def update_notion_task(
@@ -265,7 +254,7 @@ def main() -> int:
 
     manual_task = os.environ.get("TASK_ID")
     if manual_task:
-        manual_extracted = extract_task_ids(manual_task)
+        manual_extracted = extract_task_ids_from_manual(manual_task)
         for tid in manual_extracted:
             if tid not in task_ids:
                 task_ids.append(tid)
