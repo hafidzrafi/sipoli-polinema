@@ -15,7 +15,21 @@ logger = logging.getLogger("notion-sync")
 
 NOTION_API_VERSION = "2022-06-28"
 NOTION_BASE_URL = "https://api.notion.com/v1"
-TASK_REGEX = re.compile(r"\b(?:VALENIA|SIPOLI)-(\d+)\b", re.IGNORECASE)
+
+COMMIT_TASK_REGEX = re.compile(r"\[#(?:VALENIA|SIPOLI)-(\d+)\]", re.IGNORECASE)
+REF_TASK_REGEX = re.compile(r"(?:^|/)(?:VALENIA|SIPOLI)-(\d+)(?:[^\d]|$)", re.IGNORECASE)
+PR_TASK_REGEX = re.compile(
+    r"(?:\[#|(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#?)(?:VALENIA|SIPOLI)-(\d+)\]?",
+    re.IGNORECASE,
+)
+GENERIC_TASK_REGEX = re.compile(r"\b(?:VALENIA|SIPOLI)-(\d+)\b", re.IGNORECASE)
+
+STATUS_RANKS = {
+    "To do": 1,
+    "In progress": 2,
+    "In review": 3,
+    "Done": 4,
+}
 
 
 def call_notion_api(endpoint: str, token: str, method: str = "GET", payload: dict | None = None) -> dict:
@@ -38,10 +52,7 @@ def call_notion_api(endpoint: str, token: str, method: str = "GET", payload: dic
         raise
 
 
-def extract_task_ids(text: str) -> list[str]:
-    if not text:
-        return []
-    matches = TASK_REGEX.findall(text)
+def _format_task_ids(matches: list[str]) -> list[str]:
     task_ids = []
     for match in matches:
         formatted_id = f"VALENIA-{int(match):02d}"
@@ -50,7 +61,37 @@ def extract_task_ids(text: str) -> list[str]:
     return task_ids
 
 
-def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> str | None:
+def extract_task_ids_from_commit(text: str) -> list[str]:
+    if not text:
+        return []
+    return _format_task_ids(COMMIT_TASK_REGEX.findall(text))
+
+
+def extract_task_ids_from_ref(ref: str) -> list[str]:
+    if not ref:
+        return []
+    return _format_task_ids(REF_TASK_REGEX.findall(ref))
+
+
+def extract_task_ids_from_pr_text(text: str) -> list[str]:
+    if not text:
+        return []
+    return _format_task_ids(PR_TASK_REGEX.findall(text))
+
+
+def extract_task_ids(text: str) -> list[str]:
+    if not text:
+        return []
+    strict_matches = extract_task_ids_from_commit(text)
+    if strict_matches:
+        return strict_matches
+    ref_matches = extract_task_ids_from_ref(text)
+    if ref_matches:
+        return ref_matches
+    return _format_task_ids(GENERIC_TASK_REGEX.findall(text))
+
+
+def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> dict | None:
     digits_match = re.search(r"\d+", task_id)
     if not digits_match:
         logger.warning("No numeric digits found in task ID %s", task_id)
@@ -68,33 +109,79 @@ def find_notion_page_by_task_id(database_id: str, token: str, task_id: str) -> s
     result = call_notion_api(f"/databases/{database_id}/query", token, method="POST", payload=query_payload)
     pages = result.get("results", [])
     if pages:
-        return pages[0]["id"]
+        return pages[0]
 
     logger.warning("No task card found in Notion for ID %s", task_id)
     return None
 
 
-def update_notion_task(page_id: str, token: str, status_name: str, link_url: str | None = None) -> None:
-    properties: dict = {
-        "Status": {
+def should_update_status(current_status: str, target_status: str, is_pr_rejected: bool = False) -> bool:
+    if is_pr_rejected and target_status == "In progress" and current_status == "In review":
+        return True
+
+    current_rank = STATUS_RANKS.get(current_status, 0)
+    target_rank = STATUS_RANKS.get(target_status, 0)
+
+    # Prevent regressions from Done to any lower status
+    if current_status == "Done" and target_status != "Done":
+        return False
+
+    # Prevent push events from regressing In review to In progress
+    if current_status == "In review" and target_status == "In progress":
+        return False
+
+    return target_rank > current_rank
+
+
+def update_notion_task(
+    page: dict,
+    token: str,
+    status_name: str,
+    link_url: str | None = None,
+    is_pr_rejected: bool = False,
+) -> None:
+    page_id = page.get("id")
+    status_obj = page.get("properties", {}).get("Status", {}).get("status")
+    current_status = status_obj.get("name", "") if isinstance(status_obj, dict) else ""
+
+    # If already Done and target is not Done, do not modify status or commit link
+    if current_status == "Done" and status_name != "Done":
+        logger.info("Task %s is already 'Done'. Skipping update from non-main push.", page_id)
+        return
+
+    properties: dict = {}
+
+    if should_update_status(current_status, status_name, is_pr_rejected=is_pr_rejected):
+        properties["Status"] = {
             "status": {
                 "name": status_name,
             }
         }
-    }
+    else:
+        logger.info(
+            "Task %s status transition from '%s' to '%s' skipped by state guard",
+            page_id,
+            current_status,
+            status_name,
+        )
+
     if link_url:
         properties["PR / Commit Link"] = {
             "url": link_url,
         }
 
+    if not properties:
+        logger.info("No property updates required for page %s", page_id)
+        return
+
     call_notion_api(f"/pages/{page_id}", token, method="PATCH", payload={"properties": properties})
-    logger.info("Successfully updated page %s status to '%s'", page_id, status_name)
+    logger.info("Successfully updated page %s in Notion (status: '%s')", page_id, status_name)
 
 
-def parse_github_event(event_path: str) -> tuple[list[str], str, str]:
+def parse_github_event(event_path: str) -> tuple[list[str], str, str, bool]:
     if not os.path.exists(event_path):
         logger.warning("GitHub event file not found at %s", event_path)
-        return [], "", ""
+        return [], "", "", False
 
     with open(event_path, "r", encoding="utf-8") as f:
         event = json.load(f)
@@ -103,6 +190,7 @@ def parse_github_event(event_path: str) -> tuple[list[str], str, str]:
     target_tasks = []
     status_target = ""
     link_url = ""
+    is_pr_rejected = False
 
     if event_name == "pull_request":
         pr = event.get("pull_request", {})
@@ -113,33 +201,51 @@ def parse_github_event(event_path: str) -> tuple[list[str], str, str]:
         link_url = pr.get("html_url", "")
         is_merged = pr.get("merged", False)
 
-        combined_text = f"{pr_title} {head_ref} {pr_body}"
-        target_tasks = extract_task_ids(combined_text)
+        ref_tasks = extract_task_ids_from_ref(head_ref)
+        text_tasks = extract_task_ids_from_pr_text(f"{pr_title} {pr_body}")
+
+        for tid in ref_tasks + text_tasks:
+            if tid not in target_tasks:
+                target_tasks.append(tid)
 
         if action in ("opened", "reopened", "edited"):
             status_target = "In review"
-        elif action == "closed" and is_merged:
-            status_target = "Done"
+        elif action == "closed":
+            if is_merged:
+                status_target = "Done"
+            else:
+                status_target = "In progress"
+                is_pr_rejected = True
 
     elif event_name == "push":
+        if event.get("deleted", False):
+            logger.info("Push event was a branch deletion. Skipping sync.")
+            return [], "", "", False
+
         head_commit = event.get("head_commit") or {}
         link_url = head_commit.get("url", "")
         ref = event.get("ref", "")
+
+        ref_tasks = extract_task_ids_from_ref(ref)
 
         messages = [head_commit.get("message", "")]
         for c in event.get("commits", []):
             msg = c.get("message")
             if msg:
                 messages.append(msg)
-        combined_text = f"{' '.join(messages)} {ref}"
-        target_tasks = extract_task_ids(combined_text)
+        combined_text = " ".join(messages)
+        commit_tasks = extract_task_ids_from_commit(combined_text)
+
+        for tid in ref_tasks + commit_tasks:
+            if tid not in target_tasks:
+                target_tasks.append(tid)
 
         if ref == "refs/heads/main":
             status_target = "Done"
         else:
             status_target = "In progress"
 
-    return target_tasks, status_target, link_url
+    return target_tasks, status_target, link_url, is_pr_rejected
 
 
 def main() -> int:
@@ -155,7 +261,7 @@ def main() -> int:
         return 1
 
     event_path = os.environ.get("GITHUB_EVENT_PATH", "")
-    task_ids, status_target, link_url = parse_github_event(event_path)
+    task_ids, status_target, link_url, is_pr_rejected = parse_github_event(event_path)
 
     manual_task = os.environ.get("TASK_ID")
     if manual_task:
@@ -175,9 +281,15 @@ def main() -> int:
     logger.info("Identified task IDs: %s. Setting status to '%s'", task_ids, status_target)
     for task_id in task_ids:
         try:
-            page_id = find_notion_page_by_task_id(database_id, token, task_id)
-            if page_id:
-                update_notion_task(page_id, token, status_target, link_url)
+            page = find_notion_page_by_task_id(database_id, token, task_id)
+            if page:
+                update_notion_task(
+                    page,
+                    token,
+                    status_target,
+                    link_url,
+                    is_pr_rejected=is_pr_rejected,
+                )
         except (urllib.error.HTTPError, urllib.error.URLError) as err:
             logger.error("Failed to update task %s in Notion: %s", task_id, err)
 
