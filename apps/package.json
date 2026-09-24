@@ -1,0 +1,13 @@
+{
+  "name": "valenia-assets",
+  "private": true,
+  "description": "Front-end asset build for VALENIA. Dev-only; no Node at production runtime.",
+  "scripts": {
+    "css:build": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --minify",
+    "css:watch": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.0",
+    "@tailwindcss/cli": "^4.3.0"
+  }
+}

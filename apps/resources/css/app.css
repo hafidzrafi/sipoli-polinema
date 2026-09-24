@@ -1,0 +1,9 @@
+@import "tailwindcss" source(none);
+
+/* Scan server-rendered PHP for utility classes */
+@source "../../src";
+
+/* Optional design tokens (Tailwind v4 @theme) */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
