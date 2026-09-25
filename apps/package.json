@@ -7,7 +7,7 @@
     "css:watch": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --watch"
   },
   "devDependencies": {
-    "tailwindcss": "^4.3.0",
-    "@tailwindcss/cli": "^4.3.0"
+    "@tailwindcss/cli": "^4.3.0",
+    "tailwindcss": "^4.3.0"
   }
 }
