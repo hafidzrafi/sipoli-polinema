@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import urllib.error
 
 from sync_notion import call_notion_api, logger
 
@@ -28,9 +29,15 @@ MEMBER_MAP = {
 
 def resolve_member_name(people_list: list[dict]) -> str:
     """Normalize assignee name from Notion people property."""
-    if not people_list:
+    if not people_list or not isinstance(people_list, list):
         return "Unassigned"
-    raw_name = (people_list[0].get("name") or "").strip()
+    first = people_list[0]
+    if not isinstance(first, dict):
+        return "Unassigned"
+    raw_val = first.get("name")
+    if not isinstance(raw_val, str):
+        return "Unassigned"
+    raw_name = raw_val.strip()
     if not raw_name:
         return "Unassigned"
     lower_name = raw_name.lower()
@@ -45,15 +52,18 @@ def format_evidence_link(url: str | None) -> tuple[str, str]:
     if not url:
         return "", "-"
     url = url.strip()
-    pr_match = re.search(r"github\.com/[^/]+/[^/]+/pull/(\d+)", url)
+    url_lower = url.lower()
+    if not (url_lower.startswith("https://") or url_lower.startswith("http://")):
+        return "", "-"
+    pr_match = re.search(r"github\.com/[^/]+/[^/]+/pull/(\d+)", url, re.IGNORECASE)
     if pr_match:
         return url, f"PR #{pr_match.group(1)}"
-    commit_match = re.search(r"github\.com/[^/]+/[^/]+/commit/([a-f0-9]{7})", url)
+    commit_match = re.search(r"github\.com/[^/]+/[^/]+/commit/([a-f0-9]{7})", url, re.IGNORECASE)
     if commit_match:
         return url, f"Commit {commit_match.group(1)}"
-    if "figma.com" in url:
+    if "figma.com" in url_lower:
         return url, "Figma Design"
-    if "notion.so" in url:
+    if "notion.so" in url_lower:
         return url, "Notion Doc"
     return url, "Tautan Bukti"
 
@@ -61,9 +71,11 @@ def format_evidence_link(url: str | None) -> tuple[str, str]:
 def estimate_hours(priority_name: str | None, notes_text: str | None) -> int:
     """Estimate work hours from notes override [hours: N] or fallback priority."""
     if notes_text:
-        match = re.search(r"\[hours:\s*(\d+)\]", notes_text, re.IGNORECASE)
+        match = re.search(r"\[hours:\s*(-?\d+)\]", notes_text, re.IGNORECASE)
         if match:
-            return int(match.group(1))
+            h = int(match.group(1))
+            if h >= 1:
+                return h
     p_lower = (priority_name or "").lower()
     if "must" in p_lower:
         return 4
@@ -192,13 +204,17 @@ def fetch_tasks_for_sprint(tasks_db_id: str, token: str, sprint_page_id: str, on
 
 def build_sprint_payload(sprint_page: dict, task_pages: list[dict], week_number: int = 5) -> dict:
     """Build structured data payload for logbook report."""
-    props = sprint_page.get("properties", {})
-    title_list = props.get("Sprint Name", {}).get("title", [])
-    sprint_name = "".join([t.get("plain_text", "") for t in title_list]).strip() or "Sprint Aktif"
+    props = sprint_page.get("properties") or {}
+    name_obj = props.get("Sprint Name") or {}
+    title_list = name_obj.get("title") or [] if isinstance(name_obj, dict) else []
+    sprint_name = "".join([(t.get("plain_text") or "") for t in title_list if isinstance(t, dict)]).strip() or "Sprint Aktif"
 
-    dates = props.get("Dates", {}).get("date")
-    if dates and dates.get("start") and dates.get("end"):
+    dates_obj = props.get("Dates") or {}
+    dates = dates_obj.get("date") if isinstance(dates_obj, dict) else {}
+    if isinstance(dates, dict) and dates.get("start") and dates.get("end"):
         period = f"{format_date(dates['start'])} – {format_date(dates['end'])}"
+    elif isinstance(dates, dict) and dates.get("start"):
+        period = f"{format_date(dates['start'])} – Selesai"
     else:
         period = "18 September – 25 September 2026"
 
@@ -248,12 +264,15 @@ def compile_typst(main_typ_path: str, output_pdf_path: str) -> bool:
     """Compile Typst document with root sandboxing (--root .)."""
     try:
         cmd = ["typst", "compile", "--root", ".", main_typ_path, output_pdf_path]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if res.returncode != 0:
-            logger.error("Typst compilation failed: %s", res.stderr)
+            logger.error("Typst compilation failed: %s", res.stderr.strip())
             return False
         logger.info("Successfully compiled %s to %s", main_typ_path, output_pdf_path)
         return True
+    except subprocess.TimeoutExpired:
+        logger.error("Typst compilation timed out after 60 seconds")
+        return False
     except FileNotFoundError:
         logger.warning("Typst CLI not found in PATH. Skipping PDF compilation.")
         return False
@@ -268,20 +287,45 @@ def main() -> int:
     parser.add_argument("--no-compile", action="store_true", help="Skip PDF compilation")
     args = parser.parse_args()
 
+    if args.sprint < 1:
+        logger.error("--sprint must be a positive integer (>= 1), got %d", args.sprint)
+        return 1
+    if args.week < 1:
+        logger.error("--week must be a positive integer (>= 1), got %d", args.week)
+        return 1
+
     token = os.environ.get("NOTION_TOKEN") or os.environ.get("NOTION_API_KEY")
-    tasks_db = os.environ.get("NOTION_TASKS_DB_ID", "3e4ad7da-a615-807b-8e12-fbf4ad797c3d")
-    sprints_db = os.environ.get("NOTION_SPRINTS_DB_ID", "3e1ad7da-a615-80c0-9b4e-fabd149f3245")
+    tasks_db = os.environ.get("NOTION_TASKS_DB_ID")
+    sprints_db = os.environ.get("NOTION_SPRINTS_DB_ID")
 
     if not token:
         logger.error("Missing NOTION_TOKEN or NOTION_API_KEY environment variable")
         return 1
 
-    sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
+    if not tasks_db:
+        logger.error("Missing NOTION_TASKS_DB_ID environment variable")
+        return 1
+
+    if not sprints_db:
+        logger.error("Missing NOTION_SPRINTS_DB_ID environment variable")
+        return 1
+
+    try:
+        sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
+    except (urllib.error.HTTPError, urllib.error.URLError) as err:
+        logger.error("Failed to query sprint %d from Notion: %s", args.sprint, err)
+        return 1
+
     if not sprint:
         logger.error("Sprint %d not found in Notion", args.sprint)
         return 1
 
-    tasks = fetch_tasks_for_sprint(tasks_db, token, sprint["id"], only_done=not args.all_tasks)
+    try:
+        tasks = fetch_tasks_for_sprint(tasks_db, token, sprint["id"], only_done=not args.all_tasks)
+    except (urllib.error.HTTPError, urllib.error.URLError) as err:
+        logger.error("Failed to query tasks for sprint %d from Notion: %s", args.sprint, err)
+        return 1
+
     logger.info("Fetched %d tasks for sprint %d", len(tasks), args.sprint)
 
     payload = build_sprint_payload(sprint, tasks, week_number=args.week)

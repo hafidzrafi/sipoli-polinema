@@ -19,6 +19,13 @@ class TestMemberResolver(unittest.TestCase):
         self.assertEqual(export_logbook.resolve_member_name([]), "Unassigned")
         self.assertEqual(export_logbook.resolve_member_name([{"name": "Random Person"}]), "Random Person")
 
+    def test_resolve_member_name_malformed_entries(self):
+        self.assertEqual(export_logbook.resolve_member_name([None]), "Unassigned")
+        self.assertEqual(export_logbook.resolve_member_name([{"name": None}]), "Unassigned")
+        self.assertEqual(export_logbook.resolve_member_name([{"name": 123}]), "Unassigned")
+        self.assertEqual(export_logbook.resolve_member_name([{"name": "   "}]), "Unassigned")
+        self.assertEqual(export_logbook.resolve_member_name(["invalid-type"]), "Unassigned")
+
 
 class TestEvidenceFormatter(unittest.TestCase):
     def test_github_pr_url(self):
@@ -30,10 +37,19 @@ class TestEvidenceFormatter(unittest.TestCase):
         link, label = export_logbook.format_evidence_link("https://github.com/hafidzrafi/valenia/commit/f7a4892718b7")
         self.assertEqual(label, "Commit f7a4892")
 
+    def test_format_evidence_link_uppercase_commit_sha(self):
+        link, label = export_logbook.format_evidence_link("https://github.com/hafidzrafi/valenia/commit/F7A4892718B7")
+        self.assertEqual(label, "Commit F7A4892")
+
     def test_empty_or_generic_url(self):
         self.assertEqual(export_logbook.format_evidence_link("")[1], "-")
         self.assertEqual(export_logbook.format_evidence_link("https://figma.com/file/123")[1], "Figma Design")
         self.assertEqual(export_logbook.format_evidence_link("https://notion.so/doc")[1], "Notion Doc")
+
+    def test_reject_unsafe_uri_schemes(self):
+        self.assertEqual(export_logbook.format_evidence_link("javascript:alert(1)"), ("", "-"))
+        self.assertEqual(export_logbook.format_evidence_link("file:///etc/passwd"), ("", "-"))
+        self.assertEqual(export_logbook.format_evidence_link("data:text/html,test"), ("", "-"))
 
 
 class TestHoursEstimator(unittest.TestCase):
@@ -45,6 +61,11 @@ class TestHoursEstimator(unittest.TestCase):
 
     def test_notes_override(self):
         self.assertEqual(export_logbook.estimate_hours("Must", "Refactoring auth [hours: 6]"), 6)
+
+    def test_estimate_hours_clamps_zero_or_negative(self):
+        # [hours: 0] should clamp to at least 1 hour or priority fallback
+        self.assertGreaterEqual(export_logbook.estimate_hours("Must", "Quick fix [hours: 0]"), 1)
+        self.assertGreaterEqual(export_logbook.estimate_hours("Could", "Quick fix [hours: -2]"), 1)
 
 
 class TestDateFormatter(unittest.TestCase):
@@ -148,6 +169,17 @@ class TestPayloadBuilder(unittest.TestCase):
         self.assertEqual(len(payload["activities"]), 1)
         self.assertEqual(payload["activities"][0]["member"], "Raditya")
 
+    def test_build_sprint_payload_date_range_start_only(self):
+        sprint = {
+            "properties": {
+                "Sprint Name": {"title": [{"plain_text": "Sprint 3: Services"}]},
+                "Dates": {"date": {"start": "2026-10-01", "end": None}},
+            }
+        }
+        payload = export_logbook.build_sprint_payload(sprint, [], week_number=7)
+        self.assertIn("1 Okt 2026", payload["period"])
+        self.assertNotIn("18 September", payload["period"])
+
 
 class TestLogbookFileGenerator(unittest.TestCase):
     def test_generate_logbook_files(self):
@@ -203,6 +235,20 @@ class TestTypstCompilerRunner(unittest.TestCase):
         success = export_logbook.compile_typst("logbook/sprint-01/main.typ", "logbook/sprint-01/output.pdf")
         self.assertFalse(success)
 
+    @patch("subprocess.run")
+    def test_compile_typst_timeout(self, mock_run):
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["typst"], timeout=60)
+        success = export_logbook.compile_typst("logbook/sprint-01/main.typ", "logbook/sprint-01/output.pdf")
+        self.assertFalse(success)
+
+
+DEFAULT_CLI_ENV = {
+    "NOTION_TOKEN": "token-xyz",
+    "NOTION_TASKS_DB_ID": "tasks-db-123",
+    "NOTION_SPRINTS_DB_ID": "sprints-db-456",
+}
+
 
 class TestCliMain(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
@@ -211,7 +257,19 @@ class TestCliMain(unittest.TestCase):
             exit_code = export_logbook.main()
             self.assertEqual(exit_code, 1)
 
-    @patch.dict(os.environ, {"NOTION_API_KEY": "fake-token"})
+    @patch.dict(os.environ, {"NOTION_TOKEN": "token-xyz"}, clear=True)
+    def test_main_missing_tasks_db_returns_1(self):
+        with patch("sys.argv", ["export_logbook.py"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+    @patch.dict(os.environ, {"NOTION_TOKEN": "token-xyz", "NOTION_TASKS_DB_ID": "db-1"}, clear=True)
+    def test_main_missing_sprints_db_returns_1(self):
+        with patch("sys.argv", ["export_logbook.py"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
     @patch("export_logbook.fetch_sprint_by_number")
     @patch("export_logbook.fetch_tasks_for_sprint")
     @patch("export_logbook.generate_logbook_files")
@@ -230,17 +288,21 @@ class TestCliMain(unittest.TestCase):
             mock_gen.assert_called_once()
             mock_compile.assert_called_once()
 
-    @patch.dict(os.environ, {"NOTION_TOKEN": "token-from-notion-token"})
+    @patch.dict(os.environ, {
+        "NOTION_API_KEY": "token-from-api-key",
+        "NOTION_TASKS_DB_ID": "tasks-db",
+        "NOTION_SPRINTS_DB_ID": "sprints-db",
+    }, clear=True)
     @patch("export_logbook.fetch_sprint_by_number", return_value={"id": "s1", "properties": {}})
     @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
     @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
     @patch("export_logbook.compile_typst", return_value=True)
-    def test_main_supports_notion_token_env_var(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
+    def test_main_supports_notion_api_key_env_var(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
         with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
             exit_code = export_logbook.main()
             self.assertEqual(exit_code, 0)
 
-    @patch.dict(os.environ, {"NOTION_API_KEY": "fake-token"})
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
     @patch("export_logbook.fetch_sprint_by_number", return_value={"id": "s1", "properties": {}})
     @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
     @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
@@ -249,6 +311,31 @@ class TestCliMain(unittest.TestCase):
         with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
             exit_code = export_logbook.main()
             self.assertEqual(exit_code, 1, "main() must return 1 when Typst compilation fails")
+
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
+    def test_main_rejects_non_positive_sprint_or_week(self):
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "0"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "-2"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1", "--week", "0"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
+    @patch("export_logbook.fetch_sprint_by_number")
+    def test_main_handles_api_http_error_gracefully(self, mock_fetch_sprint):
+        import io
+        from urllib.error import HTTPError
+        mock_fetch_sprint.side_effect = HTTPError("url", 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
 
 
 class TestTaskNormalizationRobustness(unittest.TestCase):
