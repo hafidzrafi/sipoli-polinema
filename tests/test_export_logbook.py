@@ -520,6 +520,21 @@ class TestCliMain(unittest.TestCase):
             exit_code = export_logbook.main()
             self.assertEqual(exit_code, 0)
 
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
+    @patch("export_logbook.fetch_active_sprint")
+    @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
+    @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
+    @patch("export_logbook.compile_typst", return_value=True)
+    def test_main_auto_resolves_active_sprint_and_week(self, mock_compile, mock_gen, mock_tasks, mock_active):
+        mock_active.return_value = ({"id": "active-sprint-id", "properties": {}}, 1)
+        with patch("sys.argv", ["export_logbook.py"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 0)
+            mock_active.assert_called_once()
+            mock_tasks.assert_called_once()
+            mock_gen.assert_called_once()
+            mock_compile.assert_called_once()
+
 
 class TestTaskNormalizationRobustness(unittest.TestCase):
     def test_normalize_task_with_none_properties_does_not_crash(self):

@@ -414,17 +414,17 @@ def compile_typst(main_typ_path: str, output_pdf_path: str) -> bool:
 def main() -> int:
     """CLI entry point for exporting sprint logbook."""
     parser = argparse.ArgumentParser(description="Export Notion Sprint to Typst Logbook")
-    parser.add_argument("--sprint", type=int, default=1, help="Sprint number to export (default: 1)")
-    parser.add_argument("--week", type=int, default=5, help="Academic week number (default: 5)")
-    parser.add_argument("--checkpoint", type=str, default="Checkpoint 2 (Minggu ke-8)", help="Target milestone")
+    parser.add_argument("--sprint", type=int, default=None, help="Sprint number to export (default: auto-detect Active Sprint)")
+    parser.add_argument("--week", type=int, default=None, help="Academic week number (default: auto-calculate from sprint)")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Target milestone (default: auto-derived from week)")
     parser.add_argument("--all-tasks", action="store_true", help="Include non-Done tasks")
     parser.add_argument("--no-compile", action="store_true", help="Skip PDF compilation")
     args = parser.parse_args()
 
-    if args.sprint < 1:
+    if args.sprint is not None and args.sprint < 1:
         logger.error("--sprint must be a positive integer (>= 1), got %d", args.sprint)
         return 1
-    if args.week < 1:
+    if args.week is not None and args.week < 1:
         logger.error("--week must be a positive integer (>= 1), got %d", args.week)
         return 1
 
@@ -445,30 +445,37 @@ def main() -> int:
         return 1
 
     try:
-        sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
+        if args.sprint is not None:
+            sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
+            sprint_num = args.sprint
+        else:
+            sprint, sprint_num = fetch_active_sprint(sprints_db, token)
     except (urllib.error.HTTPError, urllib.error.URLError) as err:
-        logger.error("Failed to query sprint %d from Notion: %s", args.sprint, err)
+        logger.error("Failed to query sprint from Notion: %s", err)
         return 1
 
     if not sprint:
-        logger.error("Sprint %d not found in Notion", args.sprint)
+        logger.error("No active or matching sprint found in Notion")
         return 1
+
+    week_num = args.week if args.week is not None else calculate_academic_week(sprint_number=sprint_num)
+    checkpoint = args.checkpoint if args.checkpoint is not None else derive_checkpoint_target(week_num)
 
     try:
         tasks = fetch_tasks_for_sprint(tasks_db, token, sprint["id"], only_done=not args.all_tasks)
     except (urllib.error.HTTPError, urllib.error.URLError) as err:
-        logger.error("Failed to query tasks for sprint %d from Notion: %s", args.sprint, err)
+        logger.error("Failed to query tasks for sprint %d from Notion: %s", sprint_num, err)
         return 1
 
-    logger.info("Fetched %d tasks for sprint %d", len(tasks), args.sprint)
+    logger.info("Fetched %d tasks for sprint %d (Week %d)", len(tasks), sprint_num, week_num)
 
-    payload = build_sprint_payload(sprint, tasks, week_number=args.week, checkpoint_target=args.checkpoint)
-    out_dir = f"logbook/sprint-{args.sprint:02d}"
+    payload = build_sprint_payload(sprint, tasks, week_number=week_num, checkpoint_target=checkpoint)
+    out_dir = f"logbook/sprint-{sprint_num:02d}"
     json_path, typ_path = generate_logbook_files(payload, out_dir)
     logger.info("Generated %s and %s", json_path, typ_path)
 
     if not args.no_compile:
-        pdf_path = f"{out_dir}/logbook-sprint-{args.sprint:02d}.pdf"
+        pdf_path = f"{out_dir}/logbook-sprint-{sprint_num:02d}.pdf"
         success = compile_typst(typ_path, pdf_path)
         if not success:
             logger.error("PDF compilation failed for %s", pdf_path)
