@@ -289,6 +289,24 @@ class TestNotionExtractor(unittest.TestCase):
         self.assertEqual(mock_api.call_args_list[1][1]["payload"].get("start_cursor"), "c-1")
 
 
+class TestAcademicCalendarCalculator(unittest.TestCase):
+    def test_calculate_academic_week_from_sprint_number(self):
+        # In Polinema Semester 3, Sprint 1 corresponds to Week 5
+        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=1), 5)
+        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=2), 6)
+        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=4), 8)
+
+    def test_calculate_academic_week_from_date(self):
+        d = datetime(2026, 9, 15)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=d), 4)
+
+    def test_derive_checkpoint_target(self):
+        self.assertEqual(export_logbook.derive_checkpoint_target(5), "Checkpoint 2 (Minggu ke-8)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(8), "Checkpoint 2 (Minggu ke-8)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(9), "Checkpoint 3 (Minggu ke-12)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(13), "Checkpoint 4 (Minggu ke-16)")
+
+
 class TestPayloadBuilder(unittest.TestCase):
     def test_build_sprint_payload(self):
         sprint = {

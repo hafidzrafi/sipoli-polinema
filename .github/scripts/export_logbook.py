@@ -303,6 +303,33 @@ def fetch_tasks_for_sprint(tasks_db_id: str, token: str, sprint_page_id: str, on
     return all_tasks
 
 
+SEMESTER_START_DATE = datetime(2026, 8, 24)  # Polinema Semester 3 start (Monday Week 1)
+
+
+def calculate_academic_week(
+    reference_date: datetime | None = None,
+    sprint_number: int | None = None,
+) -> int:
+    """Calculate academic week number from sprint offset or current date."""
+    if sprint_number is not None and sprint_number >= 1:
+        # Academic calibration: Sprint 1 starts at Week 5
+        return sprint_number + 4
+
+    ref = reference_date or datetime.now()
+    delta_days = (ref - SEMESTER_START_DATE).days
+    week = max(1, (delta_days // 7) + 1)
+    return min(16, week)
+
+
+def derive_checkpoint_target(week_number: int) -> str:
+    """Derive official checkpoint milestone from academic week number."""
+    if week_number <= 8:
+        return "Checkpoint 2 (Minggu ke-8)"
+    if week_number <= 12:
+        return "Checkpoint 3 (Minggu ke-12)"
+    return "Checkpoint 4 (Minggu ke-16)"
+
+
 def build_sprint_payload(
     sprint_page: dict,
     task_pages: list[dict],
