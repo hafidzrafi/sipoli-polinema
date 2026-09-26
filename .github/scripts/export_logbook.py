@@ -191,6 +191,47 @@ def normalize_task_to_activity(page: dict) -> dict:
     }
 
 
+def extract_sprint_number_from_title(title: str) -> int | None:
+    """Extract integer sprint number from sprint title (e.g. 'Sprint 1: Core' -> 1)."""
+    if not title:
+        return None
+    match = re.search(r"Sprint\s*(\d+)", title, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def fetch_active_sprint(sprints_db_id: str, token: str) -> tuple[dict | None, int]:
+    """Query Sprints DB to find the sprint with Status 'Active' and extract its number."""
+    payload = {
+        "page_size": 10,
+        "filter": {
+            "property": "Status",
+            "status": {
+                "equals": "Active",
+            },
+        },
+    }
+    res = call_notion_api(f"/databases/{sprints_db_id}/query", token, method="POST", payload=payload)
+    results = res.get("results", [])
+    if not results:
+        sprint = fetch_sprint_by_number(sprints_db_id, token, None)
+        if sprint:
+            props = sprint.get("properties") or {}
+            title_list = (props.get("Sprint Name") or {}).get("title") or []
+            title = "".join([(t.get("plain_text") or "") for t in title_list if isinstance(t, dict)])
+            num = extract_sprint_number_from_title(title) or 1
+            return sprint, num
+        return None, 1
+
+    sprint = results[0]
+    props = sprint.get("properties") or {}
+    title_list = (props.get("Sprint Name") or {}).get("title") or []
+    title = "".join([(t.get("plain_text") or "") for t in title_list if isinstance(t, dict)])
+    num = extract_sprint_number_from_title(title) or 1
+    return sprint, num
+
+
 def fetch_sprint_by_number(sprints_db_id: str, token: str, sprint_number: int | None = None) -> dict | None:
     """Query Sprints DB to find a sprint by number or active status with cursor pagination."""
     all_sprints: list[dict] = []

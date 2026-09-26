@@ -170,6 +170,53 @@ class TestTaskNormalization(unittest.TestCase):
 
 
 class TestNotionExtractor(unittest.TestCase):
+    def test_extract_sprint_number_from_title(self):
+        self.assertEqual(export_logbook.extract_sprint_number_from_title("Sprint 1: Core Infrastructure"), 1)
+        self.assertEqual(export_logbook.extract_sprint_number_from_title("Sprint 04 - Checkpoint 2"), 4)
+        self.assertEqual(export_logbook.extract_sprint_number_from_title("Sprint 12"), 12)
+        self.assertIsNone(export_logbook.extract_sprint_number_from_title("Backlog Exploration"))
+
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_active_sprint_finds_active_status(self, mock_api):
+        mock_api.return_value = {
+            "results": [
+                {
+                    "id": "sprint-active-id",
+                    "properties": {
+                        "Sprint Name": {"title": [{"plain_text": "Sprint 2: Architecture"}]},
+                        "Status": {"status": {"name": "Active"}},
+                    },
+                }
+            ],
+            "has_more": False,
+        }
+        sprint, sprint_num = export_logbook.fetch_active_sprint("sprints-db", "token")
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint["id"], "sprint-active-id")
+        self.assertEqual(sprint_num, 2)
+
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_active_sprint_fallback_when_no_active(self, mock_api):
+        mock_api.side_effect = [
+            {"results": [], "has_more": False},
+            {
+                "results": [
+                    {
+                        "id": "sprint-fallback-id",
+                        "properties": {
+                            "Sprint Name": {"title": [{"plain_text": "Sprint 1: Core"}]},
+                            "Status": {"status": {"name": "Planned"}},
+                        },
+                    }
+                ],
+                "has_more": False,
+            },
+        ]
+        sprint, sprint_num = export_logbook.fetch_active_sprint("sprints-db", "token")
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint["id"], "sprint-fallback-id")
+        self.assertEqual(sprint_num, 1)
+
     @patch("export_logbook.call_notion_api")
     def test_fetch_tasks_handles_pagination(self, mock_api):
         mock_api.side_effect = [
