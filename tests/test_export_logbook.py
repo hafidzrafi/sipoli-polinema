@@ -290,21 +290,44 @@ class TestNotionExtractor(unittest.TestCase):
 
 
 class TestAcademicCalendarCalculator(unittest.TestCase):
-    def test_calculate_academic_week_from_sprint_number(self):
-        # In Polinema Semester 3, Sprint 1 corresponds to Week 5
-        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=1), 5)
-        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=2), 6)
-        self.assertEqual(export_logbook.calculate_academic_week(sprint_number=4), 8)
+    def test_calculate_academic_week_from_sprint_number_two_week_cadence(self):
+        # 2-week sprint cadence: Sprint 1 (W5-6), Sprint 2 (W7-8), Sprint 3 (W9-10), Sprint 4 (W11-12)
+        # When reference date is outside sprint window or default, it defaults to sprint start week
+        ref_outside = datetime(2026, 8, 25)  # Week 1
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=1), 5)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=2), 7)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=3), 9)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=4), 11)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=5), 13)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=ref_outside, sprint_number=6), 15)
+
+    def test_calculate_academic_week_resolves_exact_week_within_two_week_sprint(self):
+        # Sprint 1 covers Week 5 and Week 6
+        w5_date = datetime(2026, 9, 27)  # Sunday Week 5
+        w6_date = datetime(2026, 10, 4)  # Sunday Week 6
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=w5_date, sprint_number=1), 5)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=w6_date, sprint_number=1), 6)
+
+        # Sprint 2 covers Week 7 and Week 8
+        w7_date = datetime(2026, 10, 11)  # Sunday Week 7
+        w8_date = datetime(2026, 10, 18)  # Sunday Week 8
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=w7_date, sprint_number=2), 7)
+        self.assertEqual(export_logbook.calculate_academic_week(reference_date=w8_date, sprint_number=2), 8)
 
     def test_calculate_academic_week_from_date(self):
         d = datetime(2026, 9, 15)
         self.assertEqual(export_logbook.calculate_academic_week(reference_date=d), 4)
 
     def test_derive_checkpoint_target(self):
+        self.assertEqual(export_logbook.derive_checkpoint_target(1), "Checkpoint 1 (Minggu ke-4)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(4), "Checkpoint 1 (Minggu ke-4)")
         self.assertEqual(export_logbook.derive_checkpoint_target(5), "Checkpoint 2 (Minggu ke-8)")
         self.assertEqual(export_logbook.derive_checkpoint_target(8), "Checkpoint 2 (Minggu ke-8)")
         self.assertEqual(export_logbook.derive_checkpoint_target(9), "Checkpoint 3 (Minggu ke-12)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(12), "Checkpoint 3 (Minggu ke-12)")
         self.assertEqual(export_logbook.derive_checkpoint_target(13), "Checkpoint 4 (Minggu ke-16)")
+        self.assertEqual(export_logbook.derive_checkpoint_target(16), "Checkpoint 4 (Minggu ke-16)")
+
 
 
 class TestPayloadBuilder(unittest.TestCase):
@@ -352,6 +375,18 @@ class TestPayloadBuilder(unittest.TestCase):
         }
         payload = export_logbook.build_sprint_payload(sprint, [], week_number=9, checkpoint_target="Checkpoint 3 (Minggu ke-12)")
         self.assertEqual(payload["checkpoint_target"], "Checkpoint 3 (Minggu ke-12)")
+
+    def test_build_sprint_payload_dynamic_period_fallback_when_dates_empty(self):
+        sprint = {
+            "properties": {
+                "Sprint Name": {"title": [{"plain_text": "Sprint 1: Core Infra"}]},
+                "Dates": {"date": None},
+            }
+        }
+        payload = export_logbook.build_sprint_payload(sprint, [], week_number=5)
+        # Week 5: Monday 2026-09-21 to Sunday 2026-09-27
+        self.assertEqual(payload["period"], "21 Sep 2026 – 27 Sep 2026")
+
 
 
 class TestLogbookFileGenerator(unittest.TestCase):

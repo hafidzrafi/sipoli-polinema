@@ -6,7 +6,7 @@ and builds Typst PDF logbook reports.
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -310,19 +310,49 @@ def calculate_academic_week(
     reference_date: datetime | None = None,
     sprint_number: int | None = None,
 ) -> int:
-    """Calculate academic week number from sprint offset or current date."""
-    if sprint_number is not None and sprint_number >= 1:
-        # Academic calibration: Sprint 1 starts at Week 5
-        return sprint_number + 4
+    """Calculate academic week number for 2-week sprint cadence and academic calendar.
 
+    Polinema Semester 3 calendar structure:
+    - Semester Start: 2026-08-24 (Monday, Week 1).
+    - Weeks 1-4: Pre-sprint / Proposal / Inception -> Checkpoint 1 (Minggu ke-4).
+    - Weeks 5-16: 6 Sprints (2 weeks per sprint):
+        * Sprint 1: Weeks 5 - 6
+        * Sprint 2: Weeks 7 - 8   -> Checkpoint 2 (Minggu ke-8)
+        * Sprint 3: Weeks 9 - 10
+        * Sprint 4: Weeks 11 - 12 -> Checkpoint 3 (Minggu ke-12)
+        * Sprint 5: Weeks 13 - 14
+        * Sprint 6: Weeks 15 - 16 -> Checkpoint 4 (Minggu ke-16)
+
+    Resolution Logic:
+    1. If a sprint_number is given:
+       - The sprint covers [sprint_start_week, sprint_end_week] where:
+         sprint_start_week = (sprint_number - 1) * 2 + 5
+         sprint_end_week = sprint_start_week + 1
+       - If reference_date is provided (or current date if reference_date is None):
+         Check if the calendar week falls within [sprint_start_week, sprint_end_week].
+         If it does, return that exact calendar week (e.g. Week 5 or Week 6 for Sprint 1).
+         If it falls outside (e.g. historical/future sprint query), default to sprint_start_week.
+    2. If no sprint_number is given:
+       - Return current calendar week derived from SEMESTER_START_DATE.
+    """
     ref = reference_date or datetime.now()
     delta_days = (ref - SEMESTER_START_DATE).days
-    week = max(1, (delta_days // 7) + 1)
-    return min(16, week)
+    calendar_week = max(1, min(16, (delta_days // 7) + 1))
+
+    if sprint_number is not None and sprint_number >= 1:
+        sprint_start_week = (sprint_number - 1) * 2 + 5
+        sprint_end_week = sprint_start_week + 1
+        if sprint_start_week <= calendar_week <= sprint_end_week:
+            return calendar_week
+        return sprint_start_week
+
+    return calendar_week
 
 
 def derive_checkpoint_target(week_number: int) -> str:
     """Derive official checkpoint milestone from academic week number."""
+    if week_number <= 4:
+        return "Checkpoint 1 (Minggu ke-4)"
     if week_number <= 8:
         return "Checkpoint 2 (Minggu ke-8)"
     if week_number <= 12:
@@ -349,7 +379,9 @@ def build_sprint_payload(
     elif isinstance(dates, dict) and dates.get("start"):
         period = f"{format_date(dates['start'])} – Selesai"
     else:
-        period = "18 Sep 2026 – 25 Sep 2026"
+        week_start = SEMESTER_START_DATE + timedelta(weeks=week_number - 1)
+        week_end = week_start + timedelta(days=6)
+        period = f"{format_date(week_start.strftime('%Y-%m-%d'))} – {format_date(week_end.strftime('%Y-%m-%d'))}"
 
     activities = [normalize_task_to_activity(task) for task in task_pages]
 
