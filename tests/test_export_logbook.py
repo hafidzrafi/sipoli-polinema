@@ -230,5 +230,48 @@ class TestCliMain(unittest.TestCase):
             mock_gen.assert_called_once()
             mock_compile.assert_called_once()
 
+    @patch.dict(os.environ, {"NOTION_TOKEN": "token-from-notion-token"})
+    @patch("export_logbook.fetch_sprint_by_number", return_value={"id": "s1", "properties": {}})
+    @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
+    @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
+    @patch("export_logbook.compile_typst", return_value=True)
+    def test_main_supports_notion_token_env_var(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 0)
+
+    @patch.dict(os.environ, {"NOTION_API_KEY": "fake-token"})
+    @patch("export_logbook.fetch_sprint_by_number", return_value={"id": "s1", "properties": {}})
+    @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
+    @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
+    @patch("export_logbook.compile_typst", return_value=False)
+    def test_main_export_logbook_returns_1_when_typst_fails(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1, "main() must return 1 when Typst compilation fails")
+
+
+class TestTaskNormalizationRobustness(unittest.TestCase):
+    def test_normalize_task_with_none_properties_does_not_crash(self):
+        page = {
+            "id": "page-none-props",
+            "properties": {
+                "ID": None,
+                "Task Name": None,
+                "Assignee": None,
+                "Person": None,
+                "PR / Commit Link": None,
+                "Notes": None,
+                "Deadline": None,
+                "Priority": None,
+            },
+        }
+        activity = export_logbook.normalize_task_to_activity(page)
+        self.assertEqual(activity["task"], "VALENIA-XX: ")
+        self.assertEqual(activity["member"], "Unassigned")
+        self.assertEqual(activity["date"], "-")
+        self.assertEqual(activity["hours"], 2)
+
+
 
 

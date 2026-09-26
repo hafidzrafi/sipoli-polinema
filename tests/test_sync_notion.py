@@ -417,6 +417,116 @@ class TestStateGuard(unittest.TestCase):
             },
         )
 
+    @patch("sync_notion.call_notion_api")
+    def test_update_notion_task_with_none_properties_does_not_crash(self, mock_api):
+        page = {"id": "page-none-props", "properties": None}
+        sync_notion.update_notion_task(
+            page,
+            token="dummy-token",
+            status_name="In progress",
+            link_url="https://github.com/test/commit/abc001",
+        )
+        mock_api.assert_called_once_with(
+            "/pages/page-none-props",
+            "dummy-token",
+            method="PATCH",
+            payload={
+                "properties": {
+                    "Status": {"status": {"name": "In progress"}},
+                    "PR / Commit Link": {"url": "https://github.com/test/commit/abc001"},
+                }
+            },
+        )
+
+    @patch("sync_notion.call_notion_api")
+    def test_update_notion_task_with_none_status_property_does_not_crash(self, mock_api):
+        page = {"id": "page-none-status", "properties": {"Status": None}}
+        sync_notion.update_notion_task(
+            page,
+            token="dummy-token",
+            status_name="In progress",
+            link_url="https://github.com/test/commit/abc001",
+        )
+        mock_api.assert_called_once_with(
+            "/pages/page-none-status",
+            "dummy-token",
+            method="PATCH",
+            payload={
+                "properties": {
+                    "Status": {"status": {"name": "In progress"}},
+                    "PR / Commit Link": {"url": "https://github.com/test/commit/abc001"},
+                }
+            },
+        )
+
+
+class TestSyncNotionRobustness(unittest.TestCase):
+    def test_pull_request_synchronize_sets_in_review(self):
+        os.environ["GITHUB_EVENT_NAME"] = "pull_request"
+        payload = {
+            "action": "synchronize",
+            "pull_request": {
+                "title": "feat(router): add router skeleton [#VALENIA-06]",
+                "body": "Closes #VALENIA-06",
+                "head": {"ref": "feat/VALENIA-06-router"},
+                "html_url": "https://github.com/test/pull/1",
+                "merged": False,
+            },
+        }
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
+            json.dump(payload, f)
+            f.flush()
+            task_ids, status, link, is_rejected = sync_notion.parse_github_event(f.name)
+
+        self.assertEqual(task_ids, ["VALENIA-06"])
+        self.assertEqual(status, "In review")
+        self.assertEqual(link, "https://github.com/test/pull/1")
+        self.assertFalse(is_rejected)
+
+    @patch("sync_notion.call_notion_api")
+    def test_find_notion_page_returns_none_when_empty_results(self, mock_api):
+        mock_api.return_value = {"results": []}
+        res = sync_notion.find_notion_page_by_task_id("db-123", "fake-token", "VALENIA-99")
+        self.assertIsNone(res)
+
+    @patch("urllib.request.urlopen")
+    def test_call_notion_api_handles_429_rate_limit(self, mock_urlopen):
+        import io
+        from urllib.error import HTTPError
+        fp = io.BytesIO(b'{"message": "rate_limited"}')
+        mock_urlopen.side_effect = HTTPError("https://api.notion.com/v1", 429, "Too Many Requests", {"Retry-After": "3"}, fp)
+
+        with self.assertRaises(HTTPError) as ctx:
+            sync_notion.call_notion_api("/databases/test/query", token="dummy-token")
+        self.assertEqual(ctx.exception.code, 429)
+
+    @patch("urllib.request.urlopen")
+    def test_call_notion_api_network_timeout(self, mock_urlopen):
+        import socket
+        from urllib.error import URLError
+        mock_urlopen.side_effect = URLError(socket.timeout("timed out"))
+
+        with self.assertRaises(URLError):
+            sync_notion.call_notion_api("/databases/test/query", token="dummy-token")
+
+    @patch.dict(os.environ, {
+        "NOTION_TOKEN": "dummy-token",
+        "NOTION_TASKS_DB_ID": "db-123",
+        "GITHUB_EVENT_PATH": "/fake/event.json",
+        "GITHUB_EVENT_NAME": "push",
+    })
+    @patch("sync_notion.parse_github_event", return_value=(["VALENIA-01"], "In progress", "https://github.com/test", False))
+    @patch("sync_notion.find_notion_page_by_task_id", return_value={"id": "p1", "properties": {}})
+    @patch("sync_notion.update_notion_task")
+    def test_main_sync_notion_returns_1_when_task_update_fails(self, mock_update, mock_find, mock_event):
+        import io
+        from urllib.error import HTTPError
+        mock_update.side_effect = HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"{}"))
+
+        exit_code = sync_notion.main()
+        self.assertEqual(exit_code, 1, "main() must return 1 when task updates fail")
+
 
 if __name__ == "__main__":
     unittest.main()
+

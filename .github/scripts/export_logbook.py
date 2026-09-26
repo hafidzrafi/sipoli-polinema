@@ -87,29 +87,39 @@ def format_date(date_str: str | None) -> str:
 
 def normalize_task_to_activity(page: dict) -> dict:
     """Normalize Notion task page to logbook activity dictionary."""
-    props = page.get("properties", {})
-    uid = props.get("ID", {}).get("unique_id", {}).get("number")
+    props = page.get("properties") or {}
+    id_obj = props.get("ID") or {}
+    uid = (id_obj.get("unique_id") or {}).get("number") if isinstance(id_obj, dict) else None
     task_num = f"VALENIA-{uid:02d}" if uid is not None else "VALENIA-XX"
-    title_list = props.get("Task Name", {}).get("title", [])
-    raw_title = "".join([t.get("plain_text", "") for t in title_list]).strip()
+
+    name_obj = props.get("Task Name") or {}
+    title_list = name_obj.get("title") or [] if isinstance(name_obj, dict) else []
+    raw_title = "".join([(t.get("plain_text") or "") for t in title_list if isinstance(t, dict)]).strip()
     task_label = f"{task_num}: {raw_title}"
 
     # Notion Tasks DB uses 'Assignee' for people property, with 'Person' as fallback
-    people = props.get("Assignee", {}).get("people", []) or props.get("Person", {}).get("people", [])
+    assignee_obj = props.get("Assignee") or props.get("Person") or {}
+    people = assignee_obj.get("people") or [] if isinstance(assignee_obj, dict) else []
     member = resolve_member_name(people)
 
-    link_url = props.get("PR / Commit Link", {}).get("url")
+    link_obj = props.get("PR / Commit Link") or {}
+    link_url = link_obj.get("url") if isinstance(link_obj, dict) else None
     link, label = format_evidence_link(link_url)
 
-    notes_list = props.get("Notes", {}).get("rich_text", [])
-    notes = "".join([t.get("plain_text", "") for t in notes_list]).strip() or raw_title
+    notes_obj = props.get("Notes") or {}
+    notes_list = notes_obj.get("rich_text") or [] if isinstance(notes_obj, dict) else []
+    notes = "".join([(t.get("plain_text") or "") for t in notes_list if isinstance(t, dict)]).strip() or raw_title
 
-    deadline_obj = props.get("Deadline", {}).get("date")
-    raw_date = deadline_obj.get("start") if deadline_obj else page.get("last_edited_time")
+    deadline_obj = props.get("Deadline") or {}
+    date_val = deadline_obj.get("date") or {} if isinstance(deadline_obj, dict) else {}
+    raw_date = date_val.get("start") if isinstance(date_val, dict) else None
+    if not raw_date:
+        raw_date = page.get("last_edited_time")
     formatted_date = format_date(raw_date)
 
-    priority = props.get("Priority", {}).get("select")
-    priority_name = priority.get("name") if priority else None
+    priority_obj = props.get("Priority") or {}
+    priority_select = priority_obj.get("select") or {} if isinstance(priority_obj, dict) else {}
+    priority_name = priority_select.get("name") if isinstance(priority_select, dict) else None
     hours = estimate_hours(priority_name, notes)
 
     return {
@@ -258,12 +268,12 @@ def main() -> int:
     parser.add_argument("--no-compile", action="store_true", help="Skip PDF compilation")
     args = parser.parse_args()
 
-    token = os.environ.get("NOTION_API_KEY")
+    token = os.environ.get("NOTION_TOKEN") or os.environ.get("NOTION_API_KEY")
     tasks_db = os.environ.get("NOTION_TASKS_DB_ID", "3e4ad7da-a615-807b-8e12-fbf4ad797c3d")
     sprints_db = os.environ.get("NOTION_SPRINTS_DB_ID", "3e1ad7da-a615-80c0-9b4e-fabd149f3245")
 
     if not token:
-        logger.error("Missing NOTION_API_KEY environment variable")
+        logger.error("Missing NOTION_TOKEN or NOTION_API_KEY environment variable")
         return 1
 
     sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
@@ -281,7 +291,10 @@ def main() -> int:
 
     if not args.no_compile:
         pdf_path = f"{out_dir}/logbook-sprint-{args.sprint:02d}.pdf"
-        compile_typst(typ_path, pdf_path)
+        success = compile_typst(typ_path, pdf_path)
+        if not success:
+            logger.error("PDF compilation failed for %s", pdf_path)
+            return 1
 
     return 0
 
