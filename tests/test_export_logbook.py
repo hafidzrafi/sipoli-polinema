@@ -121,3 +121,86 @@ class TestNotionExtractor(unittest.TestCase):
         sprint_none = export_logbook.fetch_sprint_by_number("sprints-db", "fake-token", 99)
         self.assertIsNone(sprint_none)
 
+
+class TestPayloadBuilder(unittest.TestCase):
+    def test_build_sprint_payload(self):
+        sprint = {
+            "properties": {
+                "Sprint Name": {"title": [{"plain_text": "Sprint 1: Core Infra"}]},
+                "Dates": {"date": {"start": "2026-09-18", "end": "2026-09-25"}},
+            }
+        }
+        task = {
+            "properties": {
+                "ID": {"unique_id": {"number": 1}},
+                "Task Name": {"title": [{"plain_text": "Setup Repo"}]},
+                "Assignee": {"people": [{"name": "Raditya"}]},
+                "PR / Commit Link": {"url": "https://github.com/hafidzrafi/valenia/pull/1"},
+                "Notes": {"rich_text": []},
+                "Deadline": {"date": {"start": "2026-09-20"}},
+                "Priority": {"select": {"name": "Must"}},
+            }
+        }
+        payload = export_logbook.build_sprint_payload(sprint, [task], week_number=5)
+        self.assertEqual(payload["sprint_name"], "Sprint 1: Core Infra")
+        self.assertEqual(payload["week_number"], 5)
+        self.assertEqual(payload["period"], "18 Sep 2026 – 25 Sep 2026")
+        self.assertEqual(len(payload["activities"]), 1)
+        self.assertEqual(payload["activities"][0]["member"], "Raditya")
+
+
+class TestLogbookFileGenerator(unittest.TestCase):
+    def test_generate_logbook_files(self):
+        import tempfile
+        import json
+        from pathlib import Path
+
+        payload = {
+            "week_number": 5,
+            "period": "18 Sep 2026 – 25 Sep 2026",
+            "sprint_name": "Sprint 1",
+            "checkpoint_target": "Checkpoint 2",
+            "activities": [],
+            "evaluations": [],
+            "summary": "Summary text",
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            json_path, typ_path = export_logbook.generate_logbook_files(payload, tmp_dir)
+            self.assertTrue(Path(json_path).exists())
+            self.assertTrue(Path(typ_path).exists())
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            self.assertEqual(loaded["week_number"], 5)
+
+            with open(typ_path, "r", encoding="utf-8") as f:
+                typ_code = f.read()
+            self.assertIn("pbl_logbook", typ_code)
+            self.assertIn("data.json", typ_code)
+
+
+class TestTypstCompilerRunner(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_compile_typst_success(self, mock_run):
+        mock_run.return_value.returncode = 0
+        success = export_logbook.compile_typst("logbook/sprint-01/main.typ", "logbook/sprint-01/output.pdf")
+        self.assertTrue(success)
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[0], "typst")
+        self.assertEqual(args[1], "compile")
+        self.assertIn("--root", args)
+
+    @patch("subprocess.run")
+    def test_compile_typst_failure(self, mock_run):
+        mock_run.return_value.returncode = 1
+        mock_run.return_value.stderr = "Typst syntax error"
+        success = export_logbook.compile_typst("logbook/sprint-01/main.typ", "logbook/sprint-01/output.pdf")
+        self.assertFalse(success)
+
+    @patch("subprocess.run", side_effect=FileNotFoundError("typst not found"))
+    def test_compile_typst_not_found(self, mock_run):
+        success = export_logbook.compile_typst("logbook/sprint-01/main.typ", "logbook/sprint-01/output.pdf")
+        self.assertFalse(success)
+
+

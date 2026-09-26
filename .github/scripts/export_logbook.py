@@ -6,8 +6,11 @@ and builds Typst PDF logbook reports.
 """
 
 from datetime import datetime
+import json
 import os
+from pathlib import Path
 import re
+import subprocess
 import sys
 
 from sync_notion import call_notion_api, logger
@@ -174,4 +177,74 @@ def fetch_tasks_for_sprint(tasks_db_id: str, token: str, sprint_page_id: str, on
         next_cursor = res.get("next_cursor")
 
     return all_tasks
+
+
+def build_sprint_payload(sprint_page: dict, task_pages: list[dict], week_number: int = 5) -> dict:
+    """Build structured data payload for logbook report."""
+    props = sprint_page.get("properties", {})
+    title_list = props.get("Sprint Name", {}).get("title", [])
+    sprint_name = "".join([t.get("plain_text", "") for t in title_list]).strip() or "Sprint Aktif"
+
+    dates = props.get("Dates", {}).get("date")
+    if dates and dates.get("start") and dates.get("end"):
+        period = f"{format_date(dates['start'])} – {format_date(dates['end'])}"
+    else:
+        period = "18 September – 25 September 2026"
+
+    activities = [normalize_task_to_activity(task) for task in task_pages]
+
+    return {
+        "week_number": week_number,
+        "period": period,
+        "sprint_name": sprint_name,
+        "checkpoint_target": "Checkpoint 2 (Minggu ke-8)",
+        "activities": activities,
+        "evaluations": [],
+        "summary": f"Pada {sprint_name}, tim pengembang VALENIA berhasil menyelesaikan seluruh aktivitas terencana dan mengintegrasikan luaran kerja ke repositori utama.",
+    }
+
+
+def generate_logbook_files(payload: dict, output_dir: str) -> tuple[str, str]:
+    """Generate data.json and main.typ inside output_dir."""
+    target_path = Path(output_dir)
+    target_path.mkdir(parents=True, exist_ok=True)
+    json_path = target_path / "data.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+
+    typ_content = """#import "../_template/logbook.typ": pbl_logbook
+#let data = json("data.json")
+
+#show: pbl_logbook.with(
+  week_number: data.week_number,
+  period: data.period,
+  sprint_name: data.sprint_name,
+  checkpoint_target: data.checkpoint_target,
+  activities: data.activities,
+  evaluations: data.evaluations,
+)
+
+#data.summary
+"""
+    typ_path = target_path / "main.typ"
+    with open(typ_path, "w", encoding="utf-8") as f:
+        f.write(typ_content)
+
+    return str(json_path), str(typ_path)
+
+
+def compile_typst(main_typ_path: str, output_pdf_path: str) -> bool:
+    """Compile Typst document with root sandboxing (--root .)."""
+    try:
+        cmd = ["typst", "compile", "--root", ".", main_typ_path, output_pdf_path]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            logger.error("Typst compilation failed: %s", res.stderr)
+            return False
+        logger.info("Successfully compiled %s to %s", main_typ_path, output_pdf_path)
+        return True
+    except FileNotFoundError:
+        logger.warning("Typst CLI not found in PATH. Skipping PDF compilation.")
+        return False
+
 
