@@ -148,6 +148,26 @@ class TestTaskNormalization(unittest.TestCase):
         activity = export_logbook.normalize_task_to_activity(page)
         self.assertEqual(activity["hours"], 6)
 
+    def test_normalize_task_with_est_hours_select_whitespace(self):
+        page = {
+            "properties": {
+                "Priority": {"select": {"name": "Tier 1 🔥‼"}},
+                "Est. Hours": {"type": "select", "select": {"name": "  5  "}},
+            }
+        }
+        activity = export_logbook.normalize_task_to_activity(page)
+        self.assertEqual(activity["hours"], 5)
+
+    def test_normalize_task_with_est_hours_select_invalid_string_falls_back_to_tier(self):
+        page = {
+            "properties": {
+                "Priority": {"select": {"name": "Tier 2 ‼"}},
+                "Est. Hours": {"type": "select", "select": {"name": "invalid-num"}},
+            }
+        }
+        activity = export_logbook.normalize_task_to_activity(page)
+        self.assertEqual(activity["hours"], 3)
+
 
 class TestNotionExtractor(unittest.TestCase):
     @patch("export_logbook.call_notion_api")
