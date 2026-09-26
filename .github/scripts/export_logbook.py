@@ -5,6 +5,7 @@ Extracts task data per sprint from Notion, maps to structured JSON,
 and builds Typst PDF logbook reports.
 """
 
+import argparse
 from datetime import datetime
 import json
 import os
@@ -246,5 +247,47 @@ def compile_typst(main_typ_path: str, output_pdf_path: str) -> bool:
     except FileNotFoundError:
         logger.warning("Typst CLI not found in PATH. Skipping PDF compilation.")
         return False
+
+
+def main() -> int:
+    """CLI entry point for exporting sprint logbook."""
+    parser = argparse.ArgumentParser(description="Export Notion Sprint to Typst Logbook")
+    parser.add_argument("--sprint", type=int, default=1, help="Sprint number to export (default: 1)")
+    parser.add_argument("--week", type=int, default=5, help="Academic week number (default: 5)")
+    parser.add_argument("--all-tasks", action="store_true", help="Include non-Done tasks")
+    parser.add_argument("--no-compile", action="store_true", help="Skip PDF compilation")
+    args = parser.parse_args()
+
+    token = os.environ.get("NOTION_API_KEY")
+    tasks_db = os.environ.get("NOTION_TASKS_DB_ID", "3e4ad7da-a615-807b-8e12-fbf4ad797c3d")
+    sprints_db = os.environ.get("NOTION_SPRINTS_DB_ID", "3e1ad7da-a615-80c0-9b4e-fabd149f3245")
+
+    if not token:
+        logger.error("Missing NOTION_API_KEY environment variable")
+        return 1
+
+    sprint = fetch_sprint_by_number(sprints_db, token, args.sprint)
+    if not sprint:
+        logger.error("Sprint %d not found in Notion", args.sprint)
+        return 1
+
+    tasks = fetch_tasks_for_sprint(tasks_db, token, sprint["id"], only_done=not args.all_tasks)
+    logger.info("Fetched %d tasks for sprint %d", len(tasks), args.sprint)
+
+    payload = build_sprint_payload(sprint, tasks, week_number=args.week)
+    out_dir = f"logbook/sprint-{args.sprint:02d}"
+    json_path, typ_path = generate_logbook_files(payload, out_dir)
+    logger.info("Generated %s and %s", json_path, typ_path)
+
+    if not args.no_compile:
+        pdf_path = f"{out_dir}/logbook-sprint-{args.sprint:02d}.pdf"
+        compile_typst(typ_path, pdf_path)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
 
 

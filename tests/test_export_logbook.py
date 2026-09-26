@@ -204,3 +204,31 @@ class TestTypstCompilerRunner(unittest.TestCase):
         self.assertFalse(success)
 
 
+class TestCliMain(unittest.TestCase):
+    @patch.dict(os.environ, {}, clear=True)
+    def test_main_missing_token_returns_1(self):
+        with patch("sys.argv", ["export_logbook.py"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 1)
+
+    @patch.dict(os.environ, {"NOTION_API_KEY": "fake-token"})
+    @patch("export_logbook.fetch_sprint_by_number")
+    @patch("export_logbook.fetch_tasks_for_sprint")
+    @patch("export_logbook.generate_logbook_files")
+    @patch("export_logbook.compile_typst")
+    def test_main_success_invokes_pipeline(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
+        mock_sprint.return_value = {"id": "sprint-1-id", "properties": {}}
+        mock_tasks.return_value = []
+        mock_gen.return_value = ("logbook/sprint-01/data.json", "logbook/sprint-01/main.typ")
+        mock_compile.return_value = True
+
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1", "--week", "5"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 0)
+            mock_sprint.assert_called_once()
+            mock_tasks.assert_called_once()
+            mock_gen.assert_called_once()
+            mock_compile.assert_called_once()
+
+
+

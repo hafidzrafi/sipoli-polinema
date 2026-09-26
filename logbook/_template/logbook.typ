@@ -18,7 +18,7 @@
   set document(title: "Logbook PBL Minggu " + str(week_number) + " - VALENIA", author: "Tim PBL VALENIA")
   set page(
     paper: "a4",
-    margin: (top: 2.5cm, bottom: 2.5cm, left: 2.5cm, right: 2.5cm),
+    margin: (top: 2cm, bottom: 2cm, left: 2.2cm, right: 2.2cm),
     header: align(right)[
       #text(size: 8pt, fill: rgb("#64748b"))[
         Logbook Mingguan PBL | #project_title | Minggu ke-#week_number
@@ -89,29 +89,33 @@
   
   if activities.len() > 0 {
     table(
-      columns: (65pt, 80pt, 1fr, 85pt, 35pt, 90pt),
+      columns: (58pt, 52pt, 1fr, 72pt, 28pt, 60pt),
       stroke: 0.5pt + rgb("#94a3b8"),
       fill: (col, row) => if row == 0 { rgb("#f1f5f9") } else { none },
-      inset: 5pt,
+      inset: 4pt,
       align: (col, row) => (
         if row == 0 { center + horizon }
         else if col == 0 or col == 4 { center + horizon }
         else { left + horizon }
       ),
       
-      [*Tanggal*],
-      [*Pelaksana*],
-      [*Uraian Aktivitas & Luaran*],
-      [*Bukti / Link*],
-      [*Jam*],
-      [*Kendala & Solusi*],
+      table.header(
+        [*Tanggal*],
+        [*Pelaksana*],
+        [*Uraian Aktivitas & Luaran*],
+        [*Bukti / Link*],
+        [*Jam*],
+        [*Kendala & Solusi*],
+      ),
       
       ..activities.map(act => (
         act.date,
         act.member,
         [
-          *#act.task* \
-          #text(size: 9pt, fill: rgb("#334155"))[#act.deliverable]
+          *#act.task*
+          #if "deliverable" in act and act.deliverable != "" and not act.task.ends-with(act.deliverable) [
+            \ #text(size: 8.5pt, fill: rgb("#475569"))[#act.deliverable]
+          ]
         ],
         if "link" in act and act.link != "" {
           text(size: 8.5pt)[#link(act.link)[#act.at("evidence_label", default: "Link")]]
@@ -120,7 +124,7 @@
         },
         str(act.hours),
         text(size: 8.5pt)[
-          #if "issue" in act and act.issue != "" [
+          #if "issue" in act and act.issue != "" and act.issue != "-" [
             *K:* #act.issue \
             *S:* #act.solution
           ] else [
@@ -155,24 +159,26 @@
     }
   )
   
-  v(16pt)
+  v(12pt)
   
-  grid(
-    columns: (1fr, 1fr),
-    align: center,
-    [
-      Mengetahui, \
-      Dosen Pembimbing / Fasilitator
-      #v(45pt)
-      *#supervisor_name* \
-      NIP. #supervisor_nip
-    ],
-    [
-      Malang, #period.split("–").last().trim() \
-      Ketua Tim PBL VALENIA
-      #v(45pt)
-      *Raditya Mahatma Ghosi* \
-      NIM. 254107020102
-    ]
-  )
+  block(breakable: false)[
+    #grid(
+      columns: (1fr, 1fr),
+      align: center,
+      [
+        Mengetahui, \
+        Dosen Pembimbing / Fasilitator
+        #v(38pt)
+        *#supervisor_name* \
+        NIP. #supervisor_nip
+      ],
+      [
+        Malang, #period.split("–").last().trim() \
+        Ketua Tim PBL VALENIA
+        #v(38pt)
+        *Raditya Mahatma Ghosi* \
+        NIM. 254107020102
+      ]
+    )
+  ]
 }

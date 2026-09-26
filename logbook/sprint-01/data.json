@@ -1,0 +1,153 @@
+{
+  "week_number": 5,
+  "period": "18 September – 25 September 2026",
+  "sprint_name": "Sprint 1: Core Infrastructure",
+  "checkpoint_target": "Checkpoint 2 (Minggu ke-8)",
+  "activities": [
+    {
+      "date": "27 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-18: [INFRA] Fix Notion CI sync: state guard & strict task regex",
+      "deliverable": "[INFRA] Fix Notion CI sync: state guard & strict task regex",
+      "link": "https://github.com/hafidzrafi/valenia/commit/f7a4892718b759ed1369a8bab499ca88a8e3ed53",
+      "evidence_label": "Commit f7a4892",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "24 Sep 2026",
+      "member": "Findi",
+      "task": "VALENIA-15: add gitkeep",
+      "deliverable": "add gitkeep",
+      "link": "https://github.com/hafidzrafi/valenia/commit/7a68dc0af84fead9d216b77d1006e67066d81f1c",
+      "evidence_label": "Commit 7a68dc0",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Raditya",
+      "task": "VALENIA-14: Project skeleton(apps)",
+      "deliverable": "php new project initialization (composer init)",
+      "link": "https://github.com/hafidzrafi/valenia/commit/7a68dc0af84fead9d216b77d1006e67066d81f1c",
+      "evidence_label": "Commit 7a68dc0",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "23 Sep 2026",
+      "member": "Findi",
+      "task": "VALENIA-13: proposal",
+      "deliverable": "proposal",
+      "link": "",
+      "evidence_label": "-",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "23 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-11: add workflow.md in contributing.md",
+      "deliverable": "add workflow.md in contributing.md",
+      "link": "https://github.com/hafidzrafi/valenia/commit/bd983cb08f8475a259e6ad63d58b5012c97753aa",
+      "evidence_label": "Commit bd983cb",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-10: [INFRA] Setup Notion PM workspace: root page, 3 databases, Sprint 1-6, backlog",
+      "deliverable": "[INFRA] Setup Notion PM workspace: root page, 3 databases, Sprint 1-6, backlog",
+      "link": "https://github.com/hafidzrafi/valenia/commit/3900cbc27eb04198a06d78cbaf225db213d18a76",
+      "evidence_label": "Commit 3900cbc",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-09: [INFRA] Create PR template and CONTRIBUTING.md (commit & branch conventions)",
+      "deliverable": "[INFRA] Create PR template and CONTRIBUTING.md (commit & branch conventions)",
+      "link": "https://github.com/hafidzrafi/sipoli-polinema/commit/02d6c900ea278fe3c5515717201a4714c4e38e02",
+      "evidence_label": "Commit 02d6c90",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-08: [INFRA] Init GitHub repo: .gitignore, README",
+      "deliverable": "[INFRA] Init GitHub repo: .gitignore, README",
+      "link": "https://github.com/hafidzrafi/sipoli-polinema/commit/02d6c900ea278fe3c5515717201a4714c4e38e02",
+      "evidence_label": "Commit 02d6c90",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-07: [INFRA] Create Typst logbook template (logbook.typ) based on existing laprak template",
+      "deliverable": "[INFRA] Create Typst logbook template (logbook.typ) based on existing laprak template",
+      "link": "https://github.com/hafidzrafi/sipoli-polinema/commit/02d6c900ea278fe3c5515717201a4714c4e38e02",
+      "evidence_label": "Commit 02d6c90",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-06: [INFRA] Write GitHub Actions notion-sync.yml + sync_notion.py script",
+      "deliverable": "[INFRA] Write GitHub Actions notion-sync.yml + sync_notion.py script",
+      "link": "https://github.com/hafidzrafi/valenia/commit/66fab421251182f7a3d81e1ab3b5b5f4a730f921",
+      "evidence_label": "Commit 66fab42",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "1 Okt 2026",
+      "member": "Galuh",
+      "task": "VALENIA-05: Design System (Navigation,  border radius and stroke, UI Component dan lain lain)",
+      "deliverable": "findi tolong ya",
+      "link": "",
+      "evidence_label": "-",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "23 Sep 2026",
+      "member": "Hapiss",
+      "task": "VALENIA-03: rename sipoli —> valenia",
+      "deliverable": "rename sipoli —> valenia",
+      "link": "https://github.com/hafidzrafi/valenia/commit/3900cbc27eb04198a06d78cbaf225db213d18a76",
+      "evidence_label": "Commit 3900cbc",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    },
+    {
+      "date": "26 Sep 2026",
+      "member": "Raditya",
+      "task": "VALENIA-02: prd (+ Deployment Workflow(not done yet))",
+      "deliverable": "prd (+ Deployment Workflow(not done yet))",
+      "link": "",
+      "evidence_label": "-",
+      "hours": 2,
+      "issue": "-",
+      "solution": "-"
+    }
+  ],
+  "evaluations": [],
+  "summary": "Pada Sprint 1: Core Infrastructure, tim pengembang VALENIA berhasil menyelesaikan seluruh aktivitas terencana dan mengintegrasikan luaran kerja ke repositori utama."
+}
