@@ -1,0 +1,63 @@
+name: Export Sprint Logbook
+
+on:
+  workflow_dispatch:
+    inputs:
+      sprint:
+        description: "Sprint number to export"
+        required: true
+        default: 1
+        type: number
+      week:
+        description: "Academic week number"
+        required: true
+        default: 5
+        type: number
+      all_tasks:
+        description: "Include non-Done tasks"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  export-logbook:
+    name: Export and Compile Logbook
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Setup Typst
+        uses: typst-community/setup-typst@v5
+        with:
+          typst-version: 'latest'
+
+      - name: Export Logbook from Notion
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TASKS_DB_ID: ${{ secrets.NOTION_TASKS_DB_ID }}
+          NOTION_SPRINTS_DB_ID: ${{ secrets.NOTION_SPRINTS_DB_ID }}
+          INPUT_SPRINT: ${{ inputs.sprint }}
+          INPUT_WEEK: ${{ inputs.week }}
+          INPUT_ALL_TASKS: ${{ inputs.all_tasks }}
+        run: |
+          EXTRA_ARGS=""
+          if [ "$INPUT_ALL_TASKS" = "true" ]; then
+            EXTRA_ARGS="--all-tasks"
+          fi
+          python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK" $EXTRA_ARGS
+
+      - name: Upload Logbook PDF Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logbook-sprint-${{ inputs.sprint }}
+          path: logbook/sprint-*/logbook-*.pdf
+          if-no-files-found: error

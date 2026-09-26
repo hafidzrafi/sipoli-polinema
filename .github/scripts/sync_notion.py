@@ -219,10 +219,11 @@ def parse_github_event(event_path: str) -> tuple[list[str], str, str, bool]:
 
         ref_tasks = extract_task_ids_from_ref(ref)
 
-        messages = [head_commit.get("message", "")]
+        head_msg = head_commit.get("message")
+        messages = [head_msg] if isinstance(head_msg, str) and head_msg else []
         for c in event.get("commits", []):
             msg = c.get("message")
-            if msg:
+            if isinstance(msg, str) and msg:
                 messages.append(msg)
         combined_text = " ".join(messages)
         commit_tasks = extract_task_ids_from_commit(combined_text)

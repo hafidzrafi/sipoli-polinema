@@ -268,6 +268,28 @@ class TestParseGithubEvent(unittest.TestCase):
         self.assertEqual(link, "")
         self.assertFalse(is_rejected)
 
+    def test_push_with_null_commit_message_does_not_crash(self):
+        os.environ["GITHUB_EVENT_NAME"] = "push"
+        payload = {
+            "ref": "refs/heads/feat/VALENIA-06-router",
+            "head_commit": {
+                "message": None,
+                "url": "https://github.com/test/commit/abc999",
+            },
+            "commits": [
+                {"message": None},
+                {"message": "feat: router [#VALENIA-06]"},
+            ],
+        }
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
+            json.dump(payload, f)
+            f.flush()
+            task_ids, status, link, is_rejected = sync_notion.parse_github_event(f.name)
+
+        self.assertEqual(task_ids, ["VALENIA-06"])
+        self.assertEqual(status, "In progress")
+        self.assertFalse(is_rejected)
+
 
 class TestStateGuard(unittest.TestCase):
     @patch("sync_notion.call_notion_api")

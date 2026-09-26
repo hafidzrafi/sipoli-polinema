@@ -93,7 +93,7 @@ def format_date(date_str: str | None) -> str:
         dt = datetime.strptime(clean_date, "%Y-%m-%d")
         months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
         return f"{dt.day} {months[dt.month - 1]} {dt.year}"
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         return date_str
 
 
@@ -155,14 +155,18 @@ def fetch_sprint_by_number(sprints_db_id: str, token: str, sprint_number: int | 
         return None
     if sprint_number is None:
         for s in sprints:
-            if s.get("properties", {}).get("Status", {}).get("status", {}).get("name") == "Active":
+            props = s.get("properties") or {} if isinstance(s, dict) else {}
+            status_obj = (props.get("Status") or {}).get("status") or {} if isinstance(props.get("Status"), dict) else {}
+            if status_obj.get("name") == "Active":
                 return s
         return sprints[0]
 
     pattern = rf"\b{sprint_number}\b"
     for s in sprints:
-        title_list = s.get("properties", {}).get("Sprint Name", {}).get("title", [])
-        title_text = "".join([t.get("plain_text", "") for t in title_list])
+        props = s.get("properties") or {} if isinstance(s, dict) else {}
+        name_obj = props.get("Sprint Name") or {}
+        title_list = name_obj.get("title") or [] if isinstance(name_obj, dict) else []
+        title_text = "".join([(t.get("plain_text") or "") for t in title_list if isinstance(t, dict)])
         if re.search(pattern, title_text):
             return s
     return None
@@ -202,7 +206,12 @@ def fetch_tasks_for_sprint(tasks_db_id: str, token: str, sprint_page_id: str, on
     return all_tasks
 
 
-def build_sprint_payload(sprint_page: dict, task_pages: list[dict], week_number: int = 5) -> dict:
+def build_sprint_payload(
+    sprint_page: dict,
+    task_pages: list[dict],
+    week_number: int = 5,
+    checkpoint_target: str = "Checkpoint 2 (Minggu ke-8)",
+) -> dict:
     """Build structured data payload for logbook report."""
     props = sprint_page.get("properties") or {}
     name_obj = props.get("Sprint Name") or {}
@@ -216,7 +225,7 @@ def build_sprint_payload(sprint_page: dict, task_pages: list[dict], week_number:
     elif isinstance(dates, dict) and dates.get("start"):
         period = f"{format_date(dates['start'])} – Selesai"
     else:
-        period = "18 September – 25 September 2026"
+        period = "18 Sep 2026 – 25 Sep 2026"
 
     activities = [normalize_task_to_activity(task) for task in task_pages]
 
@@ -224,7 +233,7 @@ def build_sprint_payload(sprint_page: dict, task_pages: list[dict], week_number:
         "week_number": week_number,
         "period": period,
         "sprint_name": sprint_name,
-        "checkpoint_target": "Checkpoint 2 (Minggu ke-8)",
+        "checkpoint_target": checkpoint_target,
         "activities": activities,
         "evaluations": [],
         "summary": f"Pada {sprint_name}, tim pengembang VALENIA berhasil menyelesaikan seluruh aktivitas terencana dan mengintegrasikan luaran kerja ke repositori utama.",
@@ -283,6 +292,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Export Notion Sprint to Typst Logbook")
     parser.add_argument("--sprint", type=int, default=1, help="Sprint number to export (default: 1)")
     parser.add_argument("--week", type=int, default=5, help="Academic week number (default: 5)")
+    parser.add_argument("--checkpoint", type=str, default="Checkpoint 2 (Minggu ke-8)", help="Target milestone")
     parser.add_argument("--all-tasks", action="store_true", help="Include non-Done tasks")
     parser.add_argument("--no-compile", action="store_true", help="Skip PDF compilation")
     args = parser.parse_args()
@@ -328,7 +338,7 @@ def main() -> int:
 
     logger.info("Fetched %d tasks for sprint %d", len(tasks), args.sprint)
 
-    payload = build_sprint_payload(sprint, tasks, week_number=args.week)
+    payload = build_sprint_payload(sprint, tasks, week_number=args.week, checkpoint_target=args.checkpoint)
     out_dir = f"logbook/sprint-{args.sprint:02d}"
     json_path, typ_path = generate_logbook_files(payload, out_dir)
     logger.info("Generated %s and %s", json_path, typ_path)

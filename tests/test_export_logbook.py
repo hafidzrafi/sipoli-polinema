@@ -142,6 +142,25 @@ class TestNotionExtractor(unittest.TestCase):
         sprint_none = export_logbook.fetch_sprint_by_number("sprints-db", "fake-token", 99)
         self.assertIsNone(sprint_none)
 
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_sprint_with_none_properties_does_not_crash(self, mock_api):
+        mock_api.return_value = {
+            "results": [
+                {"id": "sprint-null-props", "properties": None},
+                {"id": "sprint-null-status", "properties": {"Status": None}},
+                {
+                    "id": "sprint-active-id",
+                    "properties": {
+                        "Sprint Name": {"title": [{"plain_text": "Sprint 2"}]},
+                        "Status": {"status": {"name": "Active"}},
+                    },
+                },
+            ]
+        }
+        sprint = export_logbook.fetch_sprint_by_number("sprints-db", "token", 2)
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint["id"], "sprint-active-id")
+
 
 class TestPayloadBuilder(unittest.TestCase):
     def test_build_sprint_payload(self):
@@ -179,6 +198,15 @@ class TestPayloadBuilder(unittest.TestCase):
         payload = export_logbook.build_sprint_payload(sprint, [], week_number=7)
         self.assertIn("1 Okt 2026", payload["period"])
         self.assertNotIn("18 September", payload["period"])
+
+    def test_build_sprint_payload_custom_checkpoint(self):
+        sprint = {
+            "properties": {
+                "Sprint Name": {"title": [{"plain_text": "Sprint 4"}]},
+            }
+        }
+        payload = export_logbook.build_sprint_payload(sprint, [], week_number=9, checkpoint_target="Checkpoint 3 (Minggu ke-12)")
+        self.assertEqual(payload["checkpoint_target"], "Checkpoint 3 (Minggu ke-12)")
 
 
 class TestLogbookFileGenerator(unittest.TestCase):
@@ -336,6 +364,16 @@ class TestCliMain(unittest.TestCase):
         with patch("sys.argv", ["export_logbook.py", "--sprint", "1"]):
             exit_code = export_logbook.main()
             self.assertEqual(exit_code, 1)
+
+    @patch.dict(os.environ, DEFAULT_CLI_ENV, clear=True)
+    @patch("export_logbook.fetch_sprint_by_number", return_value={"id": "s1", "properties": {}})
+    @patch("export_logbook.fetch_tasks_for_sprint", return_value=[])
+    @patch("export_logbook.generate_logbook_files", return_value=("data.json", "main.typ"))
+    @patch("export_logbook.compile_typst", return_value=True)
+    def test_main_supports_custom_checkpoint(self, mock_compile, mock_gen, mock_tasks, mock_sprint):
+        with patch("sys.argv", ["export_logbook.py", "--sprint", "1", "--checkpoint", "Checkpoint 3 (Minggu ke-12)"]):
+            exit_code = export_logbook.main()
+            self.assertEqual(exit_code, 0)
 
 
 class TestTaskNormalizationRobustness(unittest.TestCase):
