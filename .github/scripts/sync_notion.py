@@ -166,7 +166,14 @@ def update_notion_task(
         return
 
     call_notion_api(f"/pages/{page_id}", token, method="PATCH", payload={"properties": properties})
-    logger.info("Successfully updated page %s in Notion (status: '%s')", page_id, status_name)
+    if "Status" in properties:
+        logger.info("Successfully updated page %s in Notion (status: '%s')", page_id, status_name)
+    else:
+        logger.info(
+            "Successfully updated page %s in Notion (link updated, status preserved as '%s')",
+            page_id,
+            current_status,
+        )
 
 
 def parse_github_event(event_path: str) -> tuple[list[str], str, str, bool]:

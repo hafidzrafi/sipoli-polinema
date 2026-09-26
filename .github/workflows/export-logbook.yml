@@ -38,7 +38,7 @@ jobs:
       - name: Setup Typst
         uses: typst-community/setup-typst@v5
         with:
-          typst-version: 'latest'
+          typst-version: '0.15.1'
 
       - name: Export Logbook from Notion
         env:
@@ -49,11 +49,11 @@ jobs:
           INPUT_WEEK: ${{ inputs.week }}
           INPUT_ALL_TASKS: ${{ inputs.all_tasks }}
         run: |
-          EXTRA_ARGS=""
           if [ "$INPUT_ALL_TASKS" = "true" ]; then
-            EXTRA_ARGS="--all-tasks"
+            python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK" --all-tasks
+          else
+            python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK"
           fi
-          python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK" $EXTRA_ARGS
 
       - name: Upload Logbook PDF Artifact
         uses: actions/upload-artifact@v4
