@@ -27,6 +27,11 @@ class TestMemberResolver(unittest.TestCase):
         self.assertEqual(export_logbook.resolve_member_name(["invalid-type"]), "Unassigned")
 
 
+    def test_resolve_multiple_members(self):
+        members = [{"name": "Raditya"}, {"name": "Hafidz Rafi"}]
+        self.assertEqual(export_logbook.resolve_member_name(members), "Raditya, Hapiss")
+
+
 class TestEvidenceFormatter(unittest.TestCase):
     def test_github_pr_url(self):
         link, label = export_logbook.format_evidence_link("https://github.com/hafidzrafi/valenia/pull/3")
@@ -63,9 +68,9 @@ class TestHoursEstimator(unittest.TestCase):
         self.assertEqual(export_logbook.estimate_hours("Must", "Refactoring auth [hours: 6]"), 6)
 
     def test_estimate_hours_clamps_zero_or_negative(self):
-        # [hours: 0] should clamp to at least 1 hour or priority fallback
-        self.assertGreaterEqual(export_logbook.estimate_hours("Must", "Quick fix [hours: 0]"), 1)
-        self.assertGreaterEqual(export_logbook.estimate_hours("Could", "Quick fix [hours: -2]"), 1)
+        # [hours: 0] or negative hours should strictly clamp to 1 hour
+        self.assertEqual(export_logbook.estimate_hours("Must", "Quick fix [hours: 0]"), 1)
+        self.assertEqual(export_logbook.estimate_hours("Could", "Quick fix [hours: -2]"), 1)
 
 
 class TestDateFormatter(unittest.TestCase):
@@ -75,6 +80,10 @@ class TestDateFormatter(unittest.TestCase):
 
     def test_empty_date(self):
         self.assertEqual(export_logbook.format_date(None), "-")
+
+    def test_whitespace_and_invalid_date(self):
+        self.assertEqual(export_logbook.format_date("   "), "-")
+        self.assertEqual(export_logbook.format_date(123), "-")
 
 
 class TestTaskNormalization(unittest.TestCase):
@@ -160,6 +169,18 @@ class TestNotionExtractor(unittest.TestCase):
         sprint = export_logbook.fetch_sprint_by_number("sprints-db", "token", 2)
         self.assertIsNotNone(sprint)
         self.assertEqual(sprint["id"], "sprint-active-id")
+
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_sprint_handles_pagination(self, mock_api):
+        mock_api.side_effect = [
+            {"results": [{"id": "sp-1", "properties": {"Sprint Name": {"title": [{"plain_text": "Sprint 1"}]}}}], "has_more": True, "next_cursor": "c-1"},
+            {"results": [{"id": "sp-2", "properties": {"Sprint Name": {"title": [{"plain_text": "Sprint 2"}]}}}], "has_more": False, "next_cursor": None},
+        ]
+        sprint = export_logbook.fetch_sprint_by_number("sprints-db", "token", 2)
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint["id"], "sp-2")
+        self.assertEqual(mock_api.call_count, 2)
+        self.assertEqual(mock_api.call_args_list[1][1]["payload"].get("start_cursor"), "c-1")
 
 
 class TestPayloadBuilder(unittest.TestCase):

@@ -319,19 +319,21 @@ class TestStateGuard(unittest.TestCase):
                 "PR / Commit Link": {"url": "https://github.com/test/pull/1"},
             },
         }
-        sync_notion.update_notion_task(
-            page,
-            token="dummy-token",
-            status_name="In progress",
-            link_url="https://github.com/test/commit/new456",
-            is_pr_rejected=False,
-        )
+        with self.assertLogs("notion-sync", level="INFO") as cm:
+            sync_notion.update_notion_task(
+                page,
+                token="dummy-token",
+                status_name="In progress",
+                link_url="https://github.com/test/commit/new456",
+                is_pr_rejected=False,
+            )
         mock_api.assert_called_once_with(
             "/pages/page-123",
             "dummy-token",
             method="PATCH",
             payload={"properties": {"PR / Commit Link": {"url": "https://github.com/test/commit/new456"}}},
         )
+        self.assertTrue(any("status preserved as 'In review'" in msg for msg in cm.output))
 
     @patch("sync_notion.call_notion_api")
     def test_in_review_task_allows_regression_on_pr_rejection(self, mock_api):

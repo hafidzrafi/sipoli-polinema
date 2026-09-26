@@ -28,23 +28,29 @@ MEMBER_MAP = {
 
 
 def resolve_member_name(people_list: list[dict]) -> str:
-    """Normalize assignee name from Notion people property."""
+    """Normalize assignee name from Notion people property, supporting multiple assignees."""
     if not people_list or not isinstance(people_list, list):
         return "Unassigned"
-    first = people_list[0]
-    if not isinstance(first, dict):
-        return "Unassigned"
-    raw_val = first.get("name")
-    if not isinstance(raw_val, str):
-        return "Unassigned"
-    raw_name = raw_val.strip()
-    if not raw_name:
-        return "Unassigned"
-    lower_name = raw_name.lower()
-    for key, mapped in MEMBER_MAP.items():
-        if key in lower_name:
-            return mapped
-    return raw_name
+    resolved: list[str] = []
+    for person in people_list:
+        if not isinstance(person, dict):
+            continue
+        raw_val = person.get("name")
+        if not isinstance(raw_val, str):
+            continue
+        raw_name = raw_val.strip()
+        if not raw_name:
+            continue
+        lower_name = raw_name.lower()
+        matched = raw_name
+        for key, mapped in MEMBER_MAP.items():
+            if key in lower_name:
+                matched = mapped
+                break
+        if matched not in resolved:
+            resolved.append(matched)
+
+    return ", ".join(resolved) if resolved else "Unassigned"
 
 
 def format_evidence_link(url: str | None) -> tuple[str, str]:
@@ -74,8 +80,7 @@ def estimate_hours(priority_name: str | None, notes_text: str | None) -> int:
         match = re.search(r"\[hours:\s*(-?\d+)\]", notes_text, re.IGNORECASE)
         if match:
             h = int(match.group(1))
-            if h >= 1:
-                return h
+            return max(1, h)
     p_lower = (priority_name or "").lower()
     if "must" in p_lower:
         return 4
@@ -86,15 +91,15 @@ def estimate_hours(priority_name: str | None, notes_text: str | None) -> int:
 
 def format_date(date_str: str | None) -> str:
     """Format ISO date string to Indonesian short date e.g. '24 Sep 2026'."""
-    if not date_str:
+    if not date_str or not isinstance(date_str, str) or not date_str.strip():
         return "-"
     try:
-        clean_date = date_str.split("T")[0]
+        clean_date = date_str.split("T")[0].strip()
         dt = datetime.strptime(clean_date, "%Y-%m-%d")
         months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
         return f"{dt.day} {months[dt.month - 1]} {dt.year}"
     except (ValueError, TypeError, AttributeError):
-        return date_str
+        return date_str.strip()
 
 
 def normalize_task_to_activity(page: dict) -> dict:
@@ -148,21 +153,33 @@ def normalize_task_to_activity(page: dict) -> dict:
 
 
 def fetch_sprint_by_number(sprints_db_id: str, token: str, sprint_number: int | None = None) -> dict | None:
-    """Query Sprints DB to find a sprint by number or active status."""
-    res = call_notion_api(f"/databases/{sprints_db_id}/query", token, method="POST", payload={"page_size": 50})
-    sprints = res.get("results", [])
-    if not sprints:
+    """Query Sprints DB to find a sprint by number or active status with cursor pagination."""
+    all_sprints: list[dict] = []
+    has_more = True
+    next_cursor = None
+    payload: dict = {"page_size": 100}
+
+    while has_more:
+        if next_cursor:
+            payload["start_cursor"] = next_cursor
+        res = call_notion_api(f"/databases/{sprints_db_id}/query", token, method="POST", payload=payload)
+        all_sprints.extend(res.get("results", []))
+        has_more = res.get("has_more", False)
+        next_cursor = res.get("next_cursor")
+
+    if not all_sprints:
         return None
+
     if sprint_number is None:
-        for s in sprints:
+        for s in all_sprints:
             props = s.get("properties") or {} if isinstance(s, dict) else {}
             status_obj = (props.get("Status") or {}).get("status") or {} if isinstance(props.get("Status"), dict) else {}
             if status_obj.get("name") == "Active":
                 return s
-        return sprints[0]
+        return all_sprints[0]
 
     pattern = rf"\b{sprint_number}\b"
-    for s in sprints:
+    for s in all_sprints:
         props = s.get("properties") or {} if isinstance(s, dict) else {}
         name_obj = props.get("Sprint Name") or {}
         title_list = name_obj.get("title") or [] if isinstance(name_obj, dict) else []
