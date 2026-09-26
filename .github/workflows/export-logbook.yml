@@ -4,20 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       sprint:
-        description: "Sprint number to export"
-        required: true
-        default: 1
-        type: number
+        description: "Sprint number to export (leave empty to auto-detect Active Sprint)"
+        required: false
+        type: string
       week:
-        description: "Academic week number"
-        required: true
-        default: 5
-        type: number
+        description: "Academic week number (leave empty to auto-calculate)"
+        required: false
+        type: string
       all_tasks:
         description: "Include non-Done tasks"
         required: false
         default: false
         type: boolean
+
+  schedule:
+    # Run every Sunday at 16:00 UTC (23:00 WIB) before Monday academic checkpoint
+    - cron: '0 16 * * 0'
 
 permissions:
   contents: read
@@ -49,15 +51,21 @@ jobs:
           INPUT_WEEK: ${{ inputs.week }}
           INPUT_ALL_TASKS: ${{ inputs.all_tasks }}
         run: |
-          if [ "$INPUT_ALL_TASKS" = "true" ]; then
-            python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK" --all-tasks
-          else
-            python3 .github/scripts/export_logbook.py --sprint "$INPUT_SPRINT" --week "$INPUT_WEEK"
+          ARGS=()
+          if [ -n "$INPUT_SPRINT" ]; then
+            ARGS+=(--sprint "$INPUT_SPRINT")
           fi
+          if [ -n "$INPUT_WEEK" ]; then
+            ARGS+=(--week "$INPUT_WEEK")
+          fi
+          if [ "$INPUT_ALL_TASKS" = "true" ]; then
+            ARGS+=(--all-tasks)
+          fi
+          python3 .github/scripts/export_logbook.py "${ARGS[@]}"
 
       - name: Upload Logbook PDF Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: logbook-sprint-${{ inputs.sprint }}
+          name: logbook-pdf-export
           path: logbook/sprint-*/logbook-*.pdf
           if-no-files-found: error
