@@ -75,6 +75,8 @@ class TestHoursEstimator(unittest.TestCase):
     def test_explicit_hours_override(self):
         self.assertEqual(export_logbook.estimate_hours("Tier 1 🔥‼", "Notes [hours: 6]", explicit_hours=8), 8)
         self.assertEqual(export_logbook.estimate_hours("Tier 3", None, explicit_hours=1), 1)
+        self.assertEqual(export_logbook.estimate_hours("Tier 1 🔥‼", None, explicit_hours=0), 1)
+        self.assertEqual(export_logbook.estimate_hours("Tier 1 🔥‼", None, explicit_hours=-3), 1)
 
     def test_estimate_hours_clamps_zero_or_negative(self):
         # [hours: 0] or negative hours should strictly clamp to 1 hour

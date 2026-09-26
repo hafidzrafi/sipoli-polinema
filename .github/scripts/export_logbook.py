@@ -80,8 +80,8 @@ def estimate_hours(
     explicit_hours: int | None = None,
 ) -> int:
     """Estimate work hours from explicit Est. Hours property, notes override, or priority tier."""
-    if explicit_hours is not None and explicit_hours >= 1:
-        return explicit_hours
+    if explicit_hours is not None:
+        return max(1, explicit_hours)
 
     if notes_text:
         match = re.search(r"\[hours:\s*(-?\d+)\]", notes_text, re.IGNORECASE)
