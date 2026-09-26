@@ -67,6 +67,15 @@ class TestHoursEstimator(unittest.TestCase):
     def test_notes_override(self):
         self.assertEqual(export_logbook.estimate_hours("Must", "Refactoring auth [hours: 6]"), 6)
 
+    def test_tier_priority_fallbacks(self):
+        self.assertEqual(export_logbook.estimate_hours("Tier 1 🔥‼", None), 4)
+        self.assertEqual(export_logbook.estimate_hours("Tier 2 ‼", None), 3)
+        self.assertEqual(export_logbook.estimate_hours("Tier 3", None), 2)
+
+    def test_explicit_hours_override(self):
+        self.assertEqual(export_logbook.estimate_hours("Tier 1 🔥‼", "Notes [hours: 6]", explicit_hours=8), 8)
+        self.assertEqual(export_logbook.estimate_hours("Tier 3", None, explicit_hours=1), 1)
+
     def test_estimate_hours_clamps_zero_or_negative(self):
         # [hours: 0] or negative hours should strictly clamp to 1 hour
         self.assertEqual(export_logbook.estimate_hours("Must", "Quick fix [hours: 0]"), 1)
@@ -108,6 +117,34 @@ class TestTaskNormalization(unittest.TestCase):
         self.assertEqual(activity["link"], "https://github.com/hafidzrafi/valenia/pull/4")
         self.assertEqual(activity["evidence_label"], "PR #4")
         self.assertEqual(activity["hours"], 4)
+
+    def test_normalize_task_with_est_hours_select(self):
+        page = {
+            "last_edited_time": "2026-09-24T10:00:00.000Z",
+            "properties": {
+                "ID": {"unique_id": {"number": 15}},
+                "Task Name": {"title": [{"plain_text": "add gitkeep"}]},
+                "Person": {"people": [{"name": "Findi"}]},
+                "Priority": {"select": {"name": "Tier 2 ‼"}},
+                "Est. Hours": {"type": "select", "select": {"name": "1"}},
+            },
+        }
+        activity = export_logbook.normalize_task_to_activity(page)
+        self.assertEqual(activity["hours"], 1)
+
+    def test_normalize_task_with_est_hours_number(self):
+        page = {
+            "last_edited_time": "2026-09-24T10:00:00.000Z",
+            "properties": {
+                "ID": {"unique_id": {"number": 10}},
+                "Task Name": {"title": [{"plain_text": "Setup Notion"}]},
+                "Person": {"people": [{"name": "Hafidz"}]},
+                "Priority": {"select": {"name": "Tier 1 🔥‼"}},
+                "Est. Hours": {"type": "number", "number": 6},
+            },
+        }
+        activity = export_logbook.normalize_task_to_activity(page)
+        self.assertEqual(activity["hours"], 6)
 
 
 class TestNotionExtractor(unittest.TestCase):

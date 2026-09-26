@@ -74,18 +74,29 @@ def format_evidence_link(url: str | None) -> tuple[str, str]:
     return url, "Tautan Bukti"
 
 
-def estimate_hours(priority_name: str | None, notes_text: str | None) -> int:
-    """Estimate work hours from notes override [hours: N] or fallback priority."""
+def estimate_hours(
+    priority_name: str | None,
+    notes_text: str | None,
+    explicit_hours: int | None = None,
+) -> int:
+    """Estimate work hours from explicit Est. Hours property, notes override, or priority tier."""
+    if explicit_hours is not None and explicit_hours >= 1:
+        return explicit_hours
+
     if notes_text:
         match = re.search(r"\[hours:\s*(-?\d+)\]", notes_text, re.IGNORECASE)
         if match:
             h = int(match.group(1))
             return max(1, h)
+
     p_lower = (priority_name or "").lower()
-    if "must" in p_lower:
+    if "tier 1" in p_lower or "must" in p_lower:
         return 4
-    if "should" in p_lower:
+    if "tier 2" in p_lower or "should" in p_lower:
         return 3
+    if "tier 3" in p_lower or "could" in p_lower:
+        return 2
+
     return 2
 
 
@@ -134,10 +145,38 @@ def normalize_task_to_activity(page: dict) -> dict:
         raw_date = page.get("last_edited_time")
     formatted_date = format_date(raw_date)
 
+    # Est. Hours extraction from Notion property (supporting select and number types)
+    explicit_hours = None
+    est_prop = props.get("Est. Hours") or props.get("Hours") or props.get("Jam") or {}
+    if isinstance(est_prop, dict):
+        p_type = est_prop.get("type")
+        if p_type == "select":
+            sel_obj = est_prop.get("select") or {}
+            sel_name = sel_obj.get("name") if isinstance(sel_obj, dict) else None
+            if sel_name:
+                try:
+                    explicit_hours = int(sel_name.strip())
+                except ValueError:
+                    pass
+        elif p_type == "number":
+            num_val = est_prop.get("number")
+            if num_val is not None and isinstance(num_val, (int, float)):
+                explicit_hours = int(round(num_val))
+        else:
+            sel_obj = est_prop.get("select")
+            if isinstance(sel_obj, dict) and sel_obj.get("name"):
+                try:
+                    explicit_hours = int(sel_obj["name"].strip())
+                except ValueError:
+                    pass
+            num_val = est_prop.get("number")
+            if num_val is not None and isinstance(num_val, (int, float)):
+                explicit_hours = int(round(num_val))
+
     priority_obj = props.get("Priority") or {}
     priority_select = priority_obj.get("select") or {} if isinstance(priority_obj, dict) else {}
     priority_name = priority_select.get("name") if isinstance(priority_select, dict) else None
-    hours = estimate_hours(priority_name, notes)
+    hours = estimate_hours(priority_name, notes, explicit_hours=explicit_hours)
 
     return {
         "date": formatted_date,
