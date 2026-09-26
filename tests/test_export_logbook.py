@@ -13,7 +13,7 @@ class TestMemberResolver(unittest.TestCase):
         self.assertEqual(export_logbook.resolve_member_name([{"name": "Raditya "}]), "Raditya")
         self.assertEqual(export_logbook.resolve_member_name([{"name": "FINDI FINANDA ASZAHRA "}]), "Findi")
         self.assertEqual(export_logbook.resolve_member_name([{"name": "Galuh Pramu"}]), "Galuh")
-        self.assertEqual(export_logbook.resolve_member_name([{"name": "Hafidz Rafi"}]), "Hapiss")
+        self.assertEqual(export_logbook.resolve_member_name([{"name": "Hafidz Rafi"}]), "Hafidz")
 
     def test_resolve_empty_or_unknown_member(self):
         self.assertEqual(export_logbook.resolve_member_name([]), "Unassigned")
@@ -29,7 +29,7 @@ class TestMemberResolver(unittest.TestCase):
 
     def test_resolve_multiple_members(self):
         members = [{"name": "Raditya"}, {"name": "Hafidz Rafi"}]
-        self.assertEqual(export_logbook.resolve_member_name(members), "Raditya, Hapiss")
+        self.assertEqual(export_logbook.resolve_member_name(members), "Raditya, Hafidz")
 
 
 class TestEvidenceFormatter(unittest.TestCase):
@@ -102,7 +102,7 @@ class TestTaskNormalization(unittest.TestCase):
         }
         activity = export_logbook.normalize_task_to_activity(page)
         self.assertEqual(activity["task"], "VALENIA-12: Automate Logbook")
-        self.assertEqual(activity["member"], "Hapiss")
+        self.assertEqual(activity["member"], "Hafidz")
         self.assertEqual(activity["date"], "25 Sep 2026")
         self.assertEqual(activity["deliverable"], "Script export_logbook.py teruji")
         self.assertEqual(activity["link"], "https://github.com/hafidzrafi/valenia/pull/4")

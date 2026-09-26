@@ -21,9 +21,9 @@ MEMBER_MAP = {
     "raditya": "Raditya",
     "findi": "Findi",
     "galuh": "Galuh",
-    "hafidz": "Hapiss",
-    "rafi": "Hapiss",
-    "hapiss": "Hapiss",
+    "hafidz": "Hafidz",
+    "rafi": "Hafidz",
+    "hapiss": "Hafidz",
 }
 
 
