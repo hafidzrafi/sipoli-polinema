@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import datetime
 import sys
 import os
@@ -77,3 +78,46 @@ class TestTaskNormalization(unittest.TestCase):
         self.assertEqual(activity["link"], "https://github.com/hafidzrafi/valenia/pull/4")
         self.assertEqual(activity["evidence_label"], "PR #4")
         self.assertEqual(activity["hours"], 4)
+
+
+class TestNotionExtractor(unittest.TestCase):
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_tasks_handles_pagination(self, mock_api):
+        mock_api.side_effect = [
+            {"results": [{"id": "page-1"}], "has_more": True, "next_cursor": "cur-1"},
+            {"results": [{"id": "page-2"}], "has_more": False, "next_cursor": None},
+        ]
+        tasks = export_logbook.fetch_tasks_for_sprint("tasks-db", "fake-token", "sprint-id", only_done=False)
+        self.assertEqual(len(tasks), 2)
+        self.assertEqual(mock_api.call_count, 2)
+        # Verify second call used start_cursor
+        second_call_payload = mock_api.call_args_list[1][1]["payload"]
+        self.assertEqual(second_call_payload.get("start_cursor"), "cur-1")
+
+    @patch("export_logbook.call_notion_api")
+    def test_fetch_sprint_by_number(self, mock_api):
+        mock_api.return_value = {
+            "results": [
+                {
+                    "id": "sprint-1-id",
+                    "properties": {
+                        "Sprint Name": {"title": [{"plain_text": "Sprint 1: Core Setup"}]},
+                        "Status": {"status": {"name": "Active"}},
+                    },
+                },
+                {
+                    "id": "sprint-2-id",
+                    "properties": {
+                        "Sprint Name": {"title": [{"plain_text": "Sprint 2: UI Design"}]},
+                        "Status": {"status": {"name": "Planned"}},
+                    },
+                },
+            ]
+        }
+        sprint = export_logbook.fetch_sprint_by_number("sprints-db", "fake-token", 1)
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint["id"], "sprint-1-id")
+
+        sprint_none = export_logbook.fetch_sprint_by_number("sprints-db", "fake-token", 99)
+        self.assertIsNone(sprint_none)
+

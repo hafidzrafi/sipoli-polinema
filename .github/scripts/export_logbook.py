@@ -10,6 +10,8 @@ import os
 import re
 import sys
 
+from sync_notion import call_notion_api, logger
+
 MEMBER_MAP = {
     "raditya": "Raditya",
     "findi": "Findi",
@@ -117,3 +119,59 @@ def normalize_task_to_activity(page: dict) -> dict:
         "issue": "-",
         "solution": "-",
     }
+
+
+def fetch_sprint_by_number(sprints_db_id: str, token: str, sprint_number: int | None = None) -> dict | None:
+    """Query Sprints DB to find a sprint by number or active status."""
+    res = call_notion_api(f"/databases/{sprints_db_id}/query", token, method="POST", payload={"page_size": 50})
+    sprints = res.get("results", [])
+    if not sprints:
+        return None
+    if sprint_number is None:
+        for s in sprints:
+            if s.get("properties", {}).get("Status", {}).get("status", {}).get("name") == "Active":
+                return s
+        return sprints[0]
+
+    pattern = rf"\b{sprint_number}\b"
+    for s in sprints:
+        title_list = s.get("properties", {}).get("Sprint Name", {}).get("title", [])
+        title_text = "".join([t.get("plain_text", "") for t in title_list])
+        if re.search(pattern, title_text):
+            return s
+    return None
+
+
+def fetch_tasks_for_sprint(tasks_db_id: str, token: str, sprint_page_id: str, only_done: bool = True) -> list[dict]:
+    """Query Tasks DB for tasks belonging to a sprint with automatic cursor pagination."""
+    filter_conditions = [
+        {
+            "property": "🏃 Sprints",
+            "relation": {"contains": sprint_page_id},
+        }
+    ]
+    if only_done:
+        filter_conditions.append({
+            "property": "Status",
+            "status": {"equals": "Done"},
+        })
+
+    payload = {
+        "page_size": 100,
+        "filter": {"and": filter_conditions} if len(filter_conditions) > 1 else filter_conditions[0],
+    }
+
+    all_tasks = []
+    has_more = True
+    next_cursor = None
+
+    while has_more:
+        if next_cursor:
+            payload["start_cursor"] = next_cursor
+        res = call_notion_api(f"/databases/{tasks_db_id}/query", token, method="POST", payload=payload)
+        all_tasks.extend(res.get("results", []))
+        has_more = res.get("has_more", False)
+        next_cursor = res.get("next_cursor")
+
+    return all_tasks
+
